@@ -1,0 +1,118 @@
+name: Fetch and release latest AOSP Clang
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-latest-aosp-clang
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Fetch and release latest AOSP Clang
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y git tar zstd
+
+      - name: Resolve and sparse-fetch latest AOSP Clang
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          AOSP_REF="main"
+          REPO_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
+
+          rm -rf /tmp/aosp-clang
+
+          git clone \
+            --depth=1 \
+            --filter=blob:none \
+            --no-checkout \
+            --branch "$AOSP_REF" \
+            "$REPO_URL" \
+            /tmp/aosp-clang
+
+          cd /tmp/aosp-clang
+
+          CLANG_VERSION="$(
+            git ls-tree -d --name-only HEAD \
+              | grep -E '^clang-r[0-9]+[a-zA-Z0-9._-]*$' \
+              | sort -V \
+              | tail -n 1
+          )"
+
+          if [ -z "$CLANG_VERSION" ]; then
+            echo "Could not resolve latest clang-r* directory from AOSP $AOSP_REF" >&2
+            exit 1
+          fi
+
+          echo "Resolved latest Clang: $CLANG_VERSION"
+
+          git sparse-checkout init --cone
+          git sparse-checkout set "$CLANG_VERSION"
+          git checkout
+
+          test -x "$CLANG_VERSION/bin/clang" || {
+            echo "Missing $CLANG_VERSION/bin/clang" >&2
+            exit 1
+          }
+
+          "$CLANG_VERSION/bin/clang" --version | tee /tmp/clang-version.txt
+          echo "$CLANG_VERSION" > /tmp/resolved-clang-version.txt
+
+      - name: Pack Clang
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CLANG_VERSION="$(cat /tmp/resolved-clang-version.txt)"
+
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+
+          cd /tmp/aosp-clang
+
+          COMMIT="$(git rev-parse HEAD)"
+          SHORT_COMMIT="$(git rev-parse --short HEAD)"
+
+          cat > "$GITHUB_WORKSPACE/dist/build-info.txt" <<EOF
+          clang_version=${CLANG_VERSION}
+          aosp_ref=main
+          aosp_project=platform/prebuilts/clang/host/linux-x86
+          aosp_commit=${COMMIT}
+          EOF
+
+          cp /tmp/clang-version.txt "$GITHUB_WORKSPACE/dist/clang-version.txt"
+
+          tar --zstd -cf "$GITHUB_WORKSPACE/dist/${CLANG_VERSION}-linux-x86-${SHORT_COMMIT}.tar.zst" \
+            "$CLANG_VERSION"
+
+          cd "$GITHUB_WORKSPACE"
+          sha256sum dist/* > dist/SHA256SUMS
+
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          CLANG_VERSION="$(cat /tmp/resolved-clang-version.txt)"
+          TAG="$CLANG_VERSION"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" \
+              dist/* \
+              --title "$CLANG_VERSION" \
+              --notes-file dist/build-info.txt
+          fi
