@@ -7,8 +7,8 @@
   "image": "Image.gz",
   "clang": "clang-r450784e",
   "build_config": "common/build.config.gki.aarch64",
-  "bazel_target": "",
-  "lto": "thin",
+  "bazel_target": null,
+  "lto": "full",
   "out_dir": "out/android13-5.10-lts",
   "dist_dir": "dist/android13-5.10-lts",
   "outputs": [

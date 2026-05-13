@@ -6,9 +6,9 @@
   "arch": "arm64",
   "image": "Image",
   "clang": "clang-r487747c",
-  "build_config": "",
+  "build_config": null,
   "bazel_target": "//common:kernel_aarch64_dist",
-  "lto": "thin",
+  "lto": "full",
   "out_dir": "out/android14-6.1-lts",
   "dist_dir": "dist/android14-6.1-lts",
   "outputs": [

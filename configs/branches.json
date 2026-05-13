@@ -6,7 +6,8 @@
       "android_release": "android11",
       "backend": "google_build_sh",
       "clang": "clang-r416183b",
-      "enabled": true
+      "enabled": true,
+      "lto": "full"
     },
     {
       "branch": "android12-5.4-lts",
@@ -14,7 +15,8 @@
       "android_release": "android12",
       "backend": "google_build_sh",
       "clang": "clang-r416183b",
-      "enabled": true
+      "enabled": true,
+      "lto": "full"
     },
     {
       "branch": "android12-5.10-lts",
@@ -22,7 +24,8 @@
       "android_release": "android12",
       "backend": "google_build_sh",
       "clang": "clang-r416183b",
-      "enabled": true
+      "enabled": true,
+      "lto": "full"
     },
     {
       "branch": "android13-5.10-lts",
@@ -30,7 +33,8 @@
       "android_release": "android13",
       "backend": "google_build_sh",
       "clang": "clang-r450784e",
-      "enabled": true
+      "enabled": true,
+      "lto": "full"
     },
     {
       "branch": "android13-5.15-lts",
@@ -38,7 +42,8 @@
       "android_release": "android13",
       "backend": "google_build_sh",
       "clang": "clang-r450784e",
-      "enabled": true
+      "enabled": true,
+      "lto": "full"
     },
     {
       "branch": "android14-5.15-lts",
@@ -46,7 +51,8 @@
       "android_release": "android14",
       "backend": "google_build_sh",
       "clang": "clang-r487747c",
-      "enabled": true
+      "enabled": true,
+      "lto": "full"
     },
     {
       "branch": "android14-6.1-lts",
@@ -54,7 +60,8 @@
       "android_release": "android14",
       "backend": "kleaf",
       "clang": "clang-r487747c",
-      "enabled": true
+      "enabled": true,
+      "lto": "full"
     },
     {
       "branch": "android15-6.6-lts",
@@ -62,7 +69,8 @@
       "android_release": "android15",
       "backend": "kleaf",
       "clang": "clang-r510928",
-      "enabled": true
+      "enabled": true,
+      "lto": "full"
     },
     {
       "branch": "android16-6.12-lts",
@@ -70,7 +78,8 @@
       "android_release": "android16",
       "backend": "kleaf",
       "clang": "clang-r536225",
-      "enabled": true
+      "enabled": true,
+      "lto": "full"
     }
   ]
 }

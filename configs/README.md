@@ -23,6 +23,16 @@ use `common/build.config.gki.aarch64` by default.
 Profiles using `kleaf` dispatch through Bazel/Kleaf and use
 `//common:kernel_aarch64_dist` by default.
 
+Backend-specific fields that do not apply to a profile are set to `null`. For
+example, `google_build_sh` profiles use `bazel_target: null`, and `kleaf`
+profiles use `build_config: null`.
+
+## LTO
+
+All profiles default to full LTO. This matches conservative GKI-oriented
+defaults, but full LTO can be slower and require more memory in CI than thinner
+link-time optimization modes.
+
 ## Toolchains
 
 Clang versions are pinned per branch for reproducibility. Android Platform
