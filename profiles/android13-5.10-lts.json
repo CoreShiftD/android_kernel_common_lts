@@ -1,0 +1,7 @@
+{
+  "name": "android13-5.10-lts",
+  "manifest_branch": "common-android13-5.10",
+  "kernel_source_branch": "android13-5.10-lts",
+  "build_config": "common/build.config.gki.aarch64",
+  "bazel_target": "//common:kernel_dist"
+}
