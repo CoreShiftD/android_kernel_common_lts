@@ -1,117 +1,129 @@
-name: Sync kernel common source
+name: Sync kernel common LTS branches
 
 on:
   workflow_dispatch:
-    inputs:
-      ack_branch:
-        description: "ACK/GKI branch to sync"
-        required: true
-        default: "android12-5.10-lts"
-      source_branch:
-        description: "Branch to push synced source into"
-        required: true
-        default: "main"
-  schedule:
-    - cron: "0 3 * * 0"
 
 permissions:
   contents: write
 
 concurrency:
-  group: sync-kernel-common-${{ github.event.inputs.source_branch || github.ref_name }}
+  group: sync-kernel-common-lts
   cancel-in-progress: true
 
 jobs:
   sync:
-    name: Sync kernel/common
+    name: Sync ${{ matrix.ack_branch }}
     runs-on: ubuntu-24.04
 
+    strategy:
+      fail-fast: false
+      matrix:
+        ack_branch:
+          - android11-5.4-lts
+          - android12-5.4-lts
+          - android12-5.10-lts
+          - android13-5.10-lts
+          - android13-5.15-lts
+          - android14-5.15-lts
+          - android14-6.1-lts
+          - android15-6.6-lts
+          - android16-6.12-lts
+
     steps:
-      - name: Checkout repo
+      - name: Checkout mirror repo
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.source_branch || github.ref_name }}
           fetch-depth: 0
 
-      - name: Install repo tool
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y git rsync
+
+      - name: Clone AOSP kernel/common
         shell: bash
         run: |
           set -euo pipefail
 
-          mkdir -p "$HOME/.local/bin"
-          curl -L https://storage.googleapis.com/git-repo-downloads/repo \
-            -o "$HOME/.local/bin/repo"
-          chmod +x "$HOME/.local/bin/repo"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          ACK_BRANCH="${{ matrix.ack_branch }}"
+          REPO_URL="https://android.googlesource.com/kernel/common"
 
-      - name: Generate minimal manifest
+          rm -rf /tmp/kernel-common
+
+          git clone \
+            --depth=1 \
+            --branch "$ACK_BRANCH" \
+            "$REPO_URL" \
+            /tmp/kernel-common
+
+          cd /tmp/kernel-common
+
+          echo "ACK_BRANCH=$ACK_BRANCH" >> "$GITHUB_ENV"
+          echo "ACK_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "ACK_SHORT_COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+          VERSION="$(make kernelversion 2>/dev/null || true)"
+          echo "KERNEL_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Prepare target branch
         shell: bash
         run: |
           set -euo pipefail
 
-          ACK_BRANCH="${{ github.event.inputs.ack_branch || 'android12-5.10-lts' }}"
+          TARGET_BRANCH="${{ matrix.ack_branch }}"
 
-          mkdir -p .github/manifests
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          cat > .github/manifests/kernel-common.xml <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <manifest>
-            <remote name="aosp" fetch="https://android.googlesource.com" />
+          if git ls-remote --exit-code --heads origin "$TARGET_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$TARGET_BRANCH"
+            git checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
+          else
+            git checkout --orphan "$TARGET_BRANCH"
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
 
-            <default remote="aosp"
-                     revision="refs/heads/${ACK_BRANCH}"
-                     sync-j="8" />
-
-            <project name="kernel/common"
-                     path="common"
-                     revision="refs/heads/${ACK_BRANCH}" />
-          </manifest>
-          EOF
-
-      - name: Sync kernel/common only
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          rm -rf /tmp/ack-common
-          mkdir -p /tmp/ack-common
-
-          cd /tmp/ack-common
-
-          repo init \
-            -u "file://${GITHUB_WORKSPACE}" \
-            -m ".github/manifests/kernel-common.xml" \
-            --depth=1
-
-          repo sync -c --no-tags --fail-fast -j"$(nproc)"
-
-      - name: Replace repo contents with kernel/common
+      - name: Replace branch contents
         shell: bash
         run: |
           set -euo pipefail
 
           rsync -a --delete \
             --exclude='.git' \
-            --exclude='.github' \
-            /tmp/ack-common/common/ "$GITHUB_WORKSPACE/"
+            /tmp/kernel-common/ "$GITHUB_WORKSPACE/"
+
+          cat > "$GITHUB_WORKSPACE/.mirror-info" <<EOF
+          upstream=android.googlesource.com/kernel/common
+          branch=${ACK_BRANCH}
+          commit=${ACK_COMMIT}
+          kernel_version=${KERNEL_VERSION}
+          EOF
 
           git add -A
 
-      - name: Commit synced source
+      - name: Commit and push
         shell: bash
         run: |
           set -euo pipefail
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          TARGET_BRANCH="${{ matrix.ack_branch }}"
 
           if git diff --cached --quiet; then
-            echo "No kernel source changes."
+            echo "No changes for $TARGET_BRANCH."
             exit 0
           fi
 
-          VERSION="$(make kernelversion 2>/dev/null || true)"
-          ACK_BRANCH="${{ github.event.inputs.ack_branch || 'android12-5.10-lts' }}"
+          if [ -n "${KERNEL_VERSION:-}" ]; then
+            MSG="Sync ${TARGET_BRANCH} to Linux ${KERNEL_VERSION}"
+          else
+            MSG="Sync ${TARGET_BRANCH}"
+          fi
 
-          git commit -m "Sync ${ACK_BRANCH}${VERSION:+ to Linux ${VERSION}}"
-          git push
+          git commit -m "$MSG" \
+            -m "Upstream: https://android.googlesource.com/kernel/common" \
+            -m "Branch: ${TARGET_BRANCH}" \
+            -m "Commit: ${ACK_COMMIT}"
+
+          git push origin "HEAD:${TARGET_BRANCH}" --force-with-lease
