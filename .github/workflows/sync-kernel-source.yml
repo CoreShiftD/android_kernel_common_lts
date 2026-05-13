@@ -1,0 +1,117 @@
+name: Sync kernel common source
+
+on:
+  workflow_dispatch:
+    inputs:
+      ack_branch:
+        description: "ACK/GKI branch to sync"
+        required: true
+        default: "android12-5.10-lts"
+      source_branch:
+        description: "Branch to push synced source into"
+        required: true
+        default: "main"
+  schedule:
+    - cron: "0 3 * * 0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-kernel-common-${{ github.event.inputs.source_branch || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Sync kernel/common
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.source_branch || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Install repo tool
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$HOME/.local/bin"
+          curl -L https://storage.googleapis.com/git-repo-downloads/repo \
+            -o "$HOME/.local/bin/repo"
+          chmod +x "$HOME/.local/bin/repo"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Generate minimal manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ACK_BRANCH="${{ github.event.inputs.ack_branch || 'android12-5.10-lts' }}"
+
+          mkdir -p .github/manifests
+
+          cat > .github/manifests/kernel-common.xml <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <manifest>
+            <remote name="aosp" fetch="https://android.googlesource.com" />
+
+            <default remote="aosp"
+                     revision="refs/heads/${ACK_BRANCH}"
+                     sync-j="8" />
+
+            <project name="kernel/common"
+                     path="common"
+                     revision="refs/heads/${ACK_BRANCH}" />
+          </manifest>
+          EOF
+
+      - name: Sync kernel/common only
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf /tmp/ack-common
+          mkdir -p /tmp/ack-common
+
+          cd /tmp/ack-common
+
+          repo init \
+            -u "file://${GITHUB_WORKSPACE}" \
+            -m ".github/manifests/kernel-common.xml" \
+            --depth=1
+
+          repo sync -c --no-tags --fail-fast -j"$(nproc)"
+
+      - name: Replace repo contents with kernel/common
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            /tmp/ack-common/common/ "$GITHUB_WORKSPACE/"
+
+          git add -A
+
+      - name: Commit synced source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --cached --quiet; then
+            echo "No kernel source changes."
+            exit 0
+          fi
+
+          VERSION="$(make kernelversion 2>/dev/null || true)"
+          ACK_BRANCH="${{ github.event.inputs.ack_branch || 'android12-5.10-lts' }}"
+
+          git commit -m "Sync ${ACK_BRANCH}${VERSION:+ to Linux ${VERSION}}"
+          git push
