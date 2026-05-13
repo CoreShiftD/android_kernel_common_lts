@@ -30,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y git jq
+          sudo apt-get install -y curl git jq
 
       - name: Resolve configured + latest AOSP Clang
         id: resolve
@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
 
           REPO_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
-          MIRROR_REF="refs/heads/mirror-goog-main-llvm-toolchain-source"
+          MIRROR_BRANCH="mirror-goog-main-llvm-toolchain-source"
           TOOLCHAINS_JSON="$GITHUB_WORKSPACE/configs/toolchains.json"
 
           test -f "$TOOLCHAINS_JSON" || {
@@ -47,17 +47,18 @@ jobs:
             exit 1
           }
 
-          rm -rf /tmp/aosp-clang-readme /tmp/aosp-clang-probe
+          rm -rf /tmp/aosp-clang-readme
 
           git clone \
             --depth=1 \
             --filter=blob:none \
             --no-checkout \
-            --branch "mirror-goog-main-llvm-toolchain-source" \
+            --branch "$MIRROR_BRANCH" \
             "$REPO_URL" \
             /tmp/aosp-clang-readme
 
           cd /tmp/aosp-clang-readme
+
           git sparse-checkout init --cone
           git sparse-checkout set README.md
           git checkout
@@ -101,33 +102,38 @@ jobs:
           echo "Configured Clang versions:"
           cat /tmp/clang-versions.txt
 
-          git init -q /tmp/aosp-clang-probe
-          git -C /tmp/aosp-clang-probe remote add origin "$REPO_URL"
-
+          # Newest-first fallback order.
+          # First branch/ref containing the requested clang-r* wins.
           CANDIDATE_REFS=(
             "refs/heads/mirror-goog-main-llvm-toolchain-source"
-            "refs/heads/master"
-            "refs/heads/main"
             "refs/heads/android16-release"
             "refs/heads/android15-release"
             "refs/heads/android14-release"
-            "refs/tags/android-14.0.0_r33"
             "refs/heads/android13-release"
             "refs/heads/android12L-release"
             "refs/heads/android12-release"
-            "refs/heads/android12L-gsi"
+            "refs/heads/main"
+            "refs/heads/master"
           )
+
+          ref_has_clang() {
+            local ref="$1"
+            local clang="$2"
+            local url="${REPO_URL}/+/${ref}/${clang}?format=JSON"
+
+            curl -fsSL "$url" >/dev/null 2>&1
+          }
 
           find_ref_for_clang() {
             local clang="$1"
             local ref
 
             for ref in "${CANDIDATE_REFS[@]}"; do
-              if git -C /tmp/aosp-clang-probe fetch --depth=1 --quiet origin "$ref" 2>/dev/null; then
-                if git -C /tmp/aosp-clang-probe cat-file -e "FETCH_HEAD:${clang}" 2>/dev/null; then
-                  printf '%s\n' "$ref"
-                  return 0
-                fi
+              echo "Probing $clang on $ref..." >&2
+
+              if ref_has_clang "$ref" "$clang"; then
+                printf '%s\n' "$ref"
+                return 0
               fi
             done
 
@@ -148,12 +154,12 @@ jobs:
             ref="$(find_ref_for_clang "$clang" || true)"
 
             if [ -z "${ref:-}" ]; then
-              echo "Could not find $clang in candidate AOSP refs" >&2
+              echo "Could not find $clang in candidate AOSP refs." >&2
               echo "Add the correct source ref to CANDIDATE_REFS." >&2
               exit 1
             fi
 
-            echo "$clang -> $ref"
+            echo "Resolved $clang -> $ref"
             printf '%s\t%s\n' "$clang" "$ref" >> /tmp/clang-matrix.tsv
           done < /tmp/clang-versions.txt
 
@@ -167,7 +173,7 @@ jobs:
               })
           ' /tmp/clang-matrix.tsv > /tmp/clang-matrix.json
 
-          echo "Matrix:"
+          echo "Resolved matrix:"
           cat /tmp/clang-matrix.json
           echo
 
@@ -263,11 +269,12 @@ jobs:
         include: ${{ fromJSON(needs.resolve.outputs.clang_matrix) }}
 
     steps:
-      - name: Check GitHub CLI
+      - name: Install dependencies
         shell: bash
         run: |
           set -euo pipefail
-          gh --version
+          sudo apt-get update
+          sudo apt-get install -y gh
 
       - name: Download packaged Clang
         uses: actions/download-artifact@v4
