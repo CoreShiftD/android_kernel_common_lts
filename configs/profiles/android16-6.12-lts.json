@@ -1,0 +1,20 @@
+{
+  "branch": "android16-6.12-lts",
+  "kernel_version": "6.12",
+  "android_release": "android16",
+  "backend": "kleaf",
+  "arch": "arm64",
+  "image": "Image",
+  "clang": "clang-r536225",
+  "build_config": "",
+  "bazel_target": "//common:kernel_aarch64_dist",
+  "lto": "thin",
+  "out_dir": "out/android16-6.12-lts",
+  "dist_dir": "dist/android16-6.12-lts",
+  "outputs": [
+    "dist/Image",
+    "dist/Image.lz4",
+    "dist/System.map",
+    "dist/vmlinux"
+  ]
+}

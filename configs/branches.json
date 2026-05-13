@@ -1,0 +1,76 @@
+{
+  "branches": [
+    {
+      "branch": "android11-5.4-lts",
+      "kernel_version": "5.4",
+      "android_release": "android11",
+      "backend": "google_build_sh",
+      "clang": "clang-r416183b",
+      "enabled": true
+    },
+    {
+      "branch": "android12-5.4-lts",
+      "kernel_version": "5.4",
+      "android_release": "android12",
+      "backend": "google_build_sh",
+      "clang": "clang-r416183b",
+      "enabled": true
+    },
+    {
+      "branch": "android12-5.10-lts",
+      "kernel_version": "5.10",
+      "android_release": "android12",
+      "backend": "google_build_sh",
+      "clang": "clang-r416183b",
+      "enabled": true
+    },
+    {
+      "branch": "android13-5.10-lts",
+      "kernel_version": "5.10",
+      "android_release": "android13",
+      "backend": "google_build_sh",
+      "clang": "clang-r450784e",
+      "enabled": true
+    },
+    {
+      "branch": "android13-5.15-lts",
+      "kernel_version": "5.15",
+      "android_release": "android13",
+      "backend": "google_build_sh",
+      "clang": "clang-r450784e",
+      "enabled": true
+    },
+    {
+      "branch": "android14-5.15-lts",
+      "kernel_version": "5.15",
+      "android_release": "android14",
+      "backend": "google_build_sh",
+      "clang": "clang-r487747c",
+      "enabled": true
+    },
+    {
+      "branch": "android14-6.1-lts",
+      "kernel_version": "6.1",
+      "android_release": "android14",
+      "backend": "kleaf",
+      "clang": "clang-r487747c",
+      "enabled": true
+    },
+    {
+      "branch": "android15-6.6-lts",
+      "kernel_version": "6.6",
+      "android_release": "android15",
+      "backend": "kleaf",
+      "clang": "clang-r510928",
+      "enabled": true
+    },
+    {
+      "branch": "android16-6.12-lts",
+      "kernel_version": "6.12",
+      "android_release": "android16",
+      "backend": "kleaf",
+      "clang": "clang-r536225",
+      "enabled": true
+    }
+  ]
+}

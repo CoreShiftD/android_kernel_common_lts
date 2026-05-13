@@ -1,0 +1,20 @@
+{
+  "branch": "android14-6.1-lts",
+  "kernel_version": "6.1",
+  "android_release": "android14",
+  "backend": "kleaf",
+  "arch": "arm64",
+  "image": "Image",
+  "clang": "clang-r487747c",
+  "build_config": "",
+  "bazel_target": "//common:kernel_aarch64_dist",
+  "lto": "thin",
+  "out_dir": "out/android14-6.1-lts",
+  "dist_dir": "dist/android14-6.1-lts",
+  "outputs": [
+    "dist/Image",
+    "dist/Image.lz4",
+    "dist/System.map",
+    "dist/vmlinux"
+  ]
+}

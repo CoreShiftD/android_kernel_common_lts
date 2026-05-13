@@ -1,0 +1,20 @@
+{
+  "branch": "android12-5.10-lts",
+  "kernel_version": "5.10",
+  "android_release": "android12",
+  "backend": "google_build_sh",
+  "arch": "arm64",
+  "image": "Image.gz",
+  "clang": "clang-r416183b",
+  "build_config": "common/build.config.gki.aarch64",
+  "bazel_target": "",
+  "lto": "thin",
+  "out_dir": "out/android12-5.10-lts",
+  "dist_dir": "dist/android12-5.10-lts",
+  "outputs": [
+    "dist/Image.gz",
+    "dist/System.map",
+    "dist/vmlinux",
+    "dist/.config"
+  ]
+}

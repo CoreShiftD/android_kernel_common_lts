@@ -1,0 +1,20 @@
+{
+  "branch": "android15-6.6-lts",
+  "kernel_version": "6.6",
+  "android_release": "android15",
+  "backend": "kleaf",
+  "arch": "arm64",
+  "image": "Image",
+  "clang": "clang-r510928",
+  "build_config": "",
+  "bazel_target": "//common:kernel_aarch64_dist",
+  "lto": "thin",
+  "out_dir": "out/android15-6.6-lts",
+  "dist_dir": "dist/android15-6.6-lts",
+  "outputs": [
+    "dist/Image",
+    "dist/Image.lz4",
+    "dist/System.map",
+    "dist/vmlinux"
+  ]
+}

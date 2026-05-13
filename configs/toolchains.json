@@ -1,0 +1,19 @@
+{
+  "default": "clang-r547379",
+  "by_branch": {
+    "android11-5.4-lts": "clang-r416183b",
+    "android12-5.4-lts": "clang-r416183b",
+    "android12-5.10-lts": "clang-r416183b",
+    "android13-5.10-lts": "clang-r450784e",
+    "android13-5.15-lts": "clang-r450784e",
+    "android14-5.15-lts": "clang-r487747c",
+    "android14-6.1-lts": "clang-r487747c",
+    "android15-6.6-lts": "clang-r510928",
+    "android16-6.12-lts": "clang-r536225"
+  },
+  "notes": {
+    "android_platform_current": "clang-r584948",
+    "android_linux_kernel_current": "clang-r547379",
+    "recommendation": "Use by_branch for reproducible ACK/GKI builds. Do not blindly use latest Android Platform Clang for kernel builds."
+  }
+}
