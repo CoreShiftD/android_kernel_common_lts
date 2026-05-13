@@ -11,9 +11,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Fetch and release configured AOSP Clang
+  resolve:
+    name: Resolve configured Clang versions
     runs-on: ubuntu-24.04
+
+    outputs:
+      clang_versions: ${{ steps.resolve.outputs.clang_versions }}
+      aosp_ref: ${{ steps.resolve.outputs.aosp_ref }}
 
     steps:
       - name: Checkout control branch
@@ -27,9 +31,10 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y git tar zstd gh python3
+          sudo apt-get install -y git python3
 
       - name: Resolve configured + latest AOSP Clang
+        id: resolve
         shell: bash
         run: |
           set -euo pipefail
@@ -79,33 +84,48 @@ jobs:
 
           echo "Resolved latest Android Platform Clang: $LATEST_CLANG"
 
-          python3 - "$TOOLCHAINS_JSON" <<'PY' > /tmp/configured-clang-versions.txt
+          python3 - "$TOOLCHAINS_JSON" "$LATEST_CLANG" <<'PY' > /tmp/clang-versions.json
           import json
           import sys
 
           path = sys.argv[1]
+          latest = sys.argv[2]
 
           with open(path, "r", encoding="utf-8") as f:
-          data = json.load(f)
+              data = json.load(f)
 
           versions = set()
 
-          default = data.get("default")
-          if isinstance(default, str) and default.startswith("clang-r"):
-             versions.add(default)
+          for key in ("default", "fallback"):
+              value = data.get(key)
+              if isinstance(value, str) and value.startswith("clang-r"):
+                  versions.add(value)
 
-          for value in data.get("by_branch", {}).values():
-          if isinstance(value, str) and value.startswith("clang-r"):
-             versions.add(value)
+          by_branch = data.get("by_branch", {})
+          if isinstance(by_branch, dict):
+              for value in by_branch.values():
+                  if isinstance(value, str) and value.startswith("clang-r"):
+                      versions.add(value)
 
-          for version in sorted(versions):
-          print(version)
+          extra = data.get("versions", [])
+          if isinstance(extra, list):
+              for value in extra:
+                  if isinstance(value, str) and value.startswith("clang-r"):
+                      versions.add(value)
+
+          versions.add(latest)
+
+          print(json.dumps(sorted(versions)))
           PY
 
-          {
-            cat /tmp/configured-clang-versions.txt
-            printf '%s\n' "$LATEST_CLANG"
-          } | sort -u > /tmp/clang-versions.txt
+          python3 - <<'PY' /tmp/clang-versions.json > /tmp/clang-versions.txt
+          import json
+          import sys
+
+          with open(sys.argv[1], "r", encoding="utf-8") as f:
+              for item in json.load(f):
+                  print(item)
+          PY
 
           echo "Will fetch/release:"
           cat /tmp/clang-versions.txt
@@ -125,47 +145,66 @@ jobs:
             fi
           done < /tmp/clang-versions.txt
 
-          echo "$AOSP_REF" > /tmp/aosp-ref.txt
+          {
+            echo "clang_versions=$(cat /tmp/clang-versions.json)"
+            echo "aosp_ref=$AOSP_REF"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Sparse-fetch selected Clang versions
+  package:
+    name: Package ${{ matrix.clang }}
+    runs-on: ubuntu-24.04
+    needs: resolve
+
+    strategy:
+      fail-fast: false
+      matrix:
+        clang: ${{ fromJSON(needs.resolve.outputs.clang_versions) }}
+
+    steps:
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y git tar zstd
+
+      - name: Sparse-fetch ${{ matrix.clang }}
         shell: bash
         run: |
           set -euo pipefail
 
+          AOSP_REF="${{ needs.resolve.outputs.aosp_ref }}"
+          CLANG_VERSION="${{ matrix.clang }}"
+          REPO_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
+
+          rm -rf /tmp/aosp-clang
+          git clone \
+            --depth=1 \
+            --filter=blob:none \
+            --no-checkout \
+            --branch "$AOSP_REF" \
+            "$REPO_URL" \
+            /tmp/aosp-clang
+
           cd /tmp/aosp-clang
 
-          mapfile -t CLANGS < /tmp/clang-versions.txt
-
-          git sparse-checkout set README.md "${CLANGS[@]}"
+          git sparse-checkout init --cone
+          git sparse-checkout set "$CLANG_VERSION"
           git checkout
 
-          for clang in "${CLANGS[@]}"; do
-            test -x "$clang/bin/clang" || {
-              echo "Missing $clang/bin/clang" >&2
-              exit 1
-            }
-
-            mkdir -p "/tmp/clang-versions/$clang"
-            "$clang/bin/clang" --version | tee "/tmp/clang-versions/$clang/clang-version.txt"
-          done
-
-      - name: Pack Clang archives
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          AOSP_REF="$(cat /tmp/aosp-ref.txt)"
-
-          cd /tmp/aosp-clang
+          test -x "$CLANG_VERSION/bin/clang" || {
+            echo "Missing $CLANG_VERSION/bin/clang" >&2
+            exit 1
+          }
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT_COMMIT="$(git rev-parse --short HEAD)"
 
-          while IFS= read -r CLANG_VERSION; do
-            OUT_DIR="$GITHUB_WORKSPACE/dist/$CLANG_VERSION"
-            mkdir -p "$OUT_DIR"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
 
-            cat > "$OUT_DIR/build-info.txt" <<EOF
+          "$CLANG_VERSION/bin/clang" --version | tee "$GITHUB_WORKSPACE/dist/clang-version.txt"
+
+          cat > "$GITHUB_WORKSPACE/dist/build-info.txt" <<EOF
           clang_version=${CLANG_VERSION}
           aosp_ref=${AOSP_REF}
           aosp_project=platform/prebuilts/clang/host/linux-x86
@@ -173,17 +212,46 @@ jobs:
           source=configs/toolchains.json + latest Android Platform Clang
           EOF
 
-            cp "/tmp/clang-versions/$CLANG_VERSION/clang-version.txt" "$OUT_DIR/clang-version.txt"
+          tar --zstd -cf "$GITHUB_WORKSPACE/dist/${CLANG_VERSION}-linux-x86-${SHORT_COMMIT}.tar.zst" \
+            "$CLANG_VERSION"
 
-            tar --zstd -cf "$OUT_DIR/${CLANG_VERSION}-linux-x86-${SHORT_COMMIT}.tar.zst" \
-              "$CLANG_VERSION"
+          cd "$GITHUB_WORKSPACE/dist"
+          sha256sum ./* > SHA256SUMS
 
-            cd "$OUT_DIR"
-            sha256sum ./* > SHA256SUMS
-            cd /tmp/aosp-clang
-          done < /tmp/clang-versions.txt
+      - name: Upload packaged Clang
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-${{ matrix.clang }}
+          path: dist/*
+          retention-days: 1
 
-      - name: Create GitHub releases
+  release:
+    name: Release ${{ matrix.clang }}
+    runs-on: ubuntu-24.04
+    needs:
+      - resolve
+      - package
+
+    strategy:
+      fail-fast: false
+      matrix:
+        clang: ${{ fromJSON(needs.resolve.outputs.clang_versions) }}
+
+    steps:
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y gh
+
+      - name: Download packaged Clang
+        uses: actions/download-artifact@v4
+        with:
+          name: clang-${{ matrix.clang }}
+          path: dist/${{ matrix.clang }}
+
+      - name: Create GitHub release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -191,16 +259,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          while IFS= read -r CLANG_VERSION; do
-            OUT_DIR="$GITHUB_WORKSPACE/dist/$CLANG_VERSION"
-            TAG="$CLANG_VERSION"
+          CLANG_VERSION="${{ matrix.clang }}"
+          OUT_DIR="$GITHUB_WORKSPACE/dist/$CLANG_VERSION"
+          TAG="$CLANG_VERSION"
 
-            if gh release view "$TAG" >/dev/null 2>&1; then
-              gh release upload "$TAG" "$OUT_DIR"/* --clobber
-            else
-              gh release create "$TAG" \
-                "$OUT_DIR"/* \
-                --title "$CLANG_VERSION" \
-                --notes-file "$OUT_DIR/build-info.txt"
-            fi
-          done < /tmp/clang-versions.txt
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$OUT_DIR"/* --clobber
+          else
+            gh release create "$TAG" \
+              "$OUT_DIR"/* \
+              --title "$CLANG_VERSION" \
+              --notes-file "$OUT_DIR/build-info.txt"
+          fi
