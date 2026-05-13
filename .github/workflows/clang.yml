@@ -1,4 +1,4 @@
-name: Fetch and release latest AOSP Clang
+name: Fetch and release AOSP Clang
 
 on:
   workflow_dispatch:
@@ -7,32 +7,43 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-latest-aosp-clang
+  group: release-aosp-clang
   cancel-in-progress: false
 
 jobs:
   release:
-    name: Fetch and release latest AOSP Clang
+    name: Fetch and release configured AOSP Clang
     runs-on: ubuntu-24.04
 
     steps:
+      - name: Checkout control branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
       - name: Install dependencies
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y git tar zstd gh
+          sudo apt-get install -y git tar zstd gh python3
 
-      - name: Resolve and sparse-fetch latest AOSP Clang
+      - name: Resolve configured + latest AOSP Clang
         shell: bash
         run: |
           set -euo pipefail
 
           AOSP_REF="mirror-goog-main-llvm-toolchain-source"
           REPO_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
+          TOOLCHAINS_JSON="$GITHUB_WORKSPACE/configs/toolchains.json"
+
+          test -f "$TOOLCHAINS_JSON" || {
+            echo "Missing $TOOLCHAINS_JSON" >&2
+            exit 1
+          }
 
           rm -rf /tmp/aosp-clang
-
           git clone \
             --depth=1 \
             --filter=blob:none \
@@ -47,7 +58,7 @@ jobs:
           git sparse-checkout set README.md
           git checkout
 
-          CLANG_VERSION="$(
+          LATEST_CLANG="$(
             awk '
               /Android Platform/ { in_platform=1; next }
               in_platform && /Currently clang-r/ {
@@ -61,56 +72,118 @@ jobs:
             ' README.md
           )"
 
-          if [ -z "$CLANG_VERSION" ]; then
+          if [ -z "$LATEST_CLANG" ]; then
             echo "Could not resolve Android Platform clang from README.md on $AOSP_REF" >&2
             exit 1
           fi
 
-          echo "Resolved Android Platform Clang: $CLANG_VERSION"
+          echo "Resolved latest Android Platform Clang: $LATEST_CLANG"
 
-          git sparse-checkout set "$CLANG_VERSION"
-          git checkout
+          python3 - "$TOOLCHAINS_JSON" <<'PY' > /tmp/configured-clang-versions.txt
+import json
+import sys
 
-          test -x "$CLANG_VERSION/bin/clang" || {
-            echo "Missing $CLANG_VERSION/bin/clang" >&2
-            exit 1
-          }
+path = sys.argv[1]
 
-          "$CLANG_VERSION/bin/clang" --version | tee /tmp/clang-version.txt
-          echo "$CLANG_VERSION" > /tmp/resolved-clang-version.txt
+with open(path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+versions = set()
+
+default = data.get("default")
+if isinstance(default, str) and default.startswith("clang-r"):
+    versions.add(default)
+
+for value in data.get("by_branch", {}).values():
+    if isinstance(value, str) and value.startswith("clang-r"):
+        versions.add(value)
+
+for version in sorted(versions):
+    print(version)
+PY
+
+          {
+            cat /tmp/configured-clang-versions.txt
+            printf '%s\n' "$LATEST_CLANG"
+          } | sort -u > /tmp/clang-versions.txt
+
+          echo "Will fetch/release:"
+          cat /tmp/clang-versions.txt
+
+          while IFS= read -r clang; do
+            case "$clang" in
+              clang-r*) ;;
+              *)
+                echo "Invalid clang version: $clang" >&2
+                exit 1
+                ;;
+            esac
+
+            if ! git ls-tree -d --name-only HEAD "$clang" | grep -qx "$clang"; then
+              echo "Clang directory does not exist on $AOSP_REF: $clang" >&2
+              exit 1
+            fi
+          done < /tmp/clang-versions.txt
+
           echo "$AOSP_REF" > /tmp/aosp-ref.txt
 
-      - name: Pack Clang
+      - name: Sparse-fetch selected Clang versions
         shell: bash
         run: |
           set -euo pipefail
 
-          CLANG_VERSION="$(cat /tmp/resolved-clang-version.txt)"
-          AOSP_REF="$(cat /tmp/aosp-ref.txt)"
+          cd /tmp/aosp-clang
 
-          mkdir -p "$GITHUB_WORKSPACE/dist"
+          mapfile -t CLANGS < /tmp/clang-versions.txt
+
+          git sparse-checkout set README.md "${CLANGS[@]}"
+          git checkout
+
+          for clang in "${CLANGS[@]}"; do
+            test -x "$clang/bin/clang" || {
+              echo "Missing $clang/bin/clang" >&2
+              exit 1
+            }
+
+            mkdir -p "/tmp/clang-versions/$clang"
+            "$clang/bin/clang" --version | tee "/tmp/clang-versions/$clang/clang-version.txt"
+          done
+
+      - name: Pack Clang archives
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          AOSP_REF="$(cat /tmp/aosp-ref.txt)"
 
           cd /tmp/aosp-clang
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT_COMMIT="$(git rev-parse --short HEAD)"
 
-          cat > "$GITHUB_WORKSPACE/dist/build-info.txt" <<EOF
+          while IFS= read -r CLANG_VERSION; do
+            OUT_DIR="$GITHUB_WORKSPACE/dist/$CLANG_VERSION"
+            mkdir -p "$OUT_DIR"
+
+            cat > "$OUT_DIR/build-info.txt" <<EOF
           clang_version=${CLANG_VERSION}
           aosp_ref=${AOSP_REF}
           aosp_project=platform/prebuilts/clang/host/linux-x86
           aosp_commit=${COMMIT}
+          source=configs/toolchains.json + latest Android Platform Clang
           EOF
 
-          cp /tmp/clang-version.txt "$GITHUB_WORKSPACE/dist/clang-version.txt"
+            cp "/tmp/clang-versions/$CLANG_VERSION/clang-version.txt" "$OUT_DIR/clang-version.txt"
 
-          tar --zstd -cf "$GITHUB_WORKSPACE/dist/${CLANG_VERSION}-linux-x86-${SHORT_COMMIT}.tar.zst" \
-            "$CLANG_VERSION"
+            tar --zstd -cf "$OUT_DIR/${CLANG_VERSION}-linux-x86-${SHORT_COMMIT}.tar.zst" \
+              "$CLANG_VERSION"
 
-          cd "$GITHUB_WORKSPACE"
-          sha256sum dist/* > dist/SHA256SUMS
+            cd "$OUT_DIR"
+            sha256sum ./* > SHA256SUMS
+            cd /tmp/aosp-clang
+          done < /tmp/clang-versions.txt
 
-      - name: Create GitHub release
+      - name: Create GitHub releases
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -118,14 +191,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          CLANG_VERSION="$(cat /tmp/resolved-clang-version.txt)"
-          TAG="$CLANG_VERSION"
+          while IFS= read -r CLANG_VERSION; do
+            OUT_DIR="$GITHUB_WORKSPACE/dist/$CLANG_VERSION"
+            TAG="$CLANG_VERSION"
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
-          else
-            gh release create "$TAG" \
-              dist/* \
-              --title "$CLANG_VERSION" \
-              --notes-file dist/build-info.txt
-          fi
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release upload "$TAG" "$OUT_DIR"/* --clobber
+            else
+              gh release create "$TAG" \
+                "$OUT_DIR"/* \
+                --title "$CLANG_VERSION" \
+                --notes-file "$OUT_DIR/build-info.txt"
+            fi
+          done < /tmp/clang-versions.txt
