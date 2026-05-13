@@ -102,8 +102,6 @@ jobs:
           echo "Configured Clang versions:"
           cat /tmp/clang-versions.txt
 
-          # Newest-first fallback order.
-          # First branch/ref containing the requested clang-r* wins.
           CANDIDATE_REFS=(
             "refs/heads/mirror-goog-main-llvm-toolchain-source"
             "refs/heads/android16-release"
@@ -233,9 +231,10 @@ jobs:
 
           mkdir -p "$GITHUB_WORKSPACE/dist"
 
-          "$CLANG_VERSION/bin/clang" --version | tee "$GITHUB_WORKSPACE/dist/clang-version.txt"
+          "$CLANG_VERSION/bin/clang" --version \
+            | tee "$GITHUB_WORKSPACE/dist/${CLANG_VERSION}-clang-version.txt"
 
-          cat > "$GITHUB_WORKSPACE/dist/build-info.txt" <<EOF
+          cat > "$GITHUB_WORKSPACE/dist/${CLANG_VERSION}-build-info.txt" <<EOF
           clang_version=${CLANG_VERSION}
           aosp_ref=${AOSP_REF}
           aosp_project=platform/prebuilts/clang/host/linux-x86
@@ -243,11 +242,13 @@ jobs:
           source=configs/toolchains.json + latest Android Platform Clang
           EOF
 
-          tar --zstd -cf "$GITHUB_WORKSPACE/dist/${CLANG_VERSION}-linux-x86-${SHORT_COMMIT}.tar.zst" \
+          ARCHIVE="${CLANG_VERSION}-linux-x86-${SHORT_COMMIT}.tar.zst"
+
+          tar --zstd -cf "$GITHUB_WORKSPACE/dist/$ARCHIVE" \
             "$CLANG_VERSION"
 
           cd "$GITHUB_WORKSPACE/dist"
-          sha256sum ./* > SHA256SUMS
+          sha256sum "$ARCHIVE" > "${CLANG_VERSION}-SHA256SUMS"
 
       - name: Upload packaged Clang
         uses: actions/upload-artifact@v4
@@ -257,16 +258,11 @@ jobs:
           retention-days: 1
 
   release:
-    name: Release ${{ matrix.clang }}
+    name: Release all Clang toolchains
     runs-on: ubuntu-24.04
     needs:
       - resolve
       - package
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.resolve.outputs.clang_matrix) }}
 
     steps:
       - name: Install dependencies
@@ -276,13 +272,51 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gh
 
-      - name: Download packaged Clang
+      - name: Download all packaged Clang artifacts
         uses: actions/download-artifact@v4
         with:
-          name: clang-${{ matrix.clang }}
-          path: dist/${{ matrix.clang }}
+          pattern: clang-*
+          path: dist
+          merge-multiple: false
 
-      - name: Create GitHub release
+      - name: Prepare combined release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-assets
+
+          find dist -type f -name '*.tar.zst' -exec cp -a {} release-assets/ \;
+          find dist -type f -name '*-SHA256SUMS' -exec cp -a {} release-assets/ \;
+          find dist -type f -name '*-clang-version.txt' -exec cp -a {} release-assets/ \;
+          find dist -type f -name '*-build-info.txt' -exec cp -a {} release-assets/ \;
+
+          {
+            echo "# AOSP Clang toolchains"
+            echo
+            echo "Generated from:"
+            echo
+            echo "- configs/toolchains.json"
+            echo "- latest Android Platform Clang from mirror-goog-main-llvm-toolchain-source"
+            echo
+            echo "Included archives:"
+            echo
+            find release-assets -maxdepth 1 -type f -name '*.tar.zst' -printf '- %f\n' | sort
+            echo
+            echo "SHA256:"
+            echo
+            cat release-assets/*-SHA256SUMS
+          } > release-assets/RELEASE_NOTES.md
+
+          {
+            echo "# Combined SHA256SUMS"
+            echo
+            cat release-assets/*-SHA256SUMS
+          } > release-assets/SHA256SUMS
+
+          ls -lah release-assets
+
+      - name: Create single GitHub release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -290,15 +324,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          CLANG_VERSION="${{ matrix.clang }}"
-          OUT_DIR="$GITHUB_WORKSPACE/dist/$CLANG_VERSION"
-          TAG="$CLANG_VERSION"
+          TAG="aosp-clang-toolchains"
+          TITLE="AOSP Clang Toolchains"
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$OUT_DIR"/* --clobber
-          else
-            gh release create "$TAG" \
-              "$OUT_DIR"/* \
-              --title "$CLANG_VERSION" \
-              --notes-file "$OUT_DIR/build-info.txt"
-          fi
+          # Keep this as one clean release. Delete/recreate to avoid stale old assets.
+          gh release delete "$TAG" --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh api --method DELETE "repos/$GH_REPO/git/refs/tags/$TAG" >/dev/null 2>&1 || true
+
+          gh release create "$TAG" \
+            release-assets/* \
+            --title "$TITLE" \
+            --notes-file release-assets/RELEASE_NOTES.md
