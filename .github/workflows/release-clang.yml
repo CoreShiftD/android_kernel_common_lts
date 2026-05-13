@@ -1,0 +1,388 @@
+name: Fetch and release AOSP Clang
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-aosp-clang
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve configured Clang versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    outputs:
+      clang_matrix: ${{ steps.resolve.outputs.clang_matrix }}
+
+    steps:
+      - name: Disable IPv6
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.lo.disable_ipv6=1
+
+      - name: Checkout control branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Check required tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tool in curl git python3; do
+            command -v "$tool" >/dev/null || {
+              echo "Missing required host tool: $tool" >&2
+              exit 1
+            }
+          done
+
+      - name: Resolve configured + latest AOSP Clang
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REPO_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
+          MIRROR_BRANCH="mirror-goog-main-llvm-toolchain-source"
+          TOOLCHAINS_JSON="$GITHUB_WORKSPACE/configs/toolchains.json"
+
+          test -f "$TOOLCHAINS_JSON" || {
+            echo "Missing $TOOLCHAINS_JSON" >&2
+            exit 1
+          }
+
+          rm -rf /tmp/aosp-clang-readme
+
+          git clone \
+            --depth=1 \
+            --filter=blob:none \
+            --no-checkout \
+            --branch "$MIRROR_BRANCH" \
+            "$REPO_URL" \
+            /tmp/aosp-clang-readme
+
+          cd /tmp/aosp-clang-readme
+
+          git sparse-checkout init --cone
+          git sparse-checkout set README.md
+          git checkout
+
+          LATEST_CLANG="$(
+            awk '
+              /Android Platform/ { in_platform=1; next }
+              in_platform && /Currently clang-r/ {
+                for (i = 1; i <= NF; i++) {
+                  if ($i ~ /^clang-r[0-9A-Za-z._-]+$/) {
+                    print $i
+                    exit
+                  }
+                }
+              }
+            ' README.md
+          )"
+
+          if [ -z "$LATEST_CLANG" ]; then
+            echo "Could not resolve Android Platform clang from README.md" >&2
+            exit 1
+          fi
+
+          echo "Resolved latest Android Platform Clang: $LATEST_CLANG"
+
+          python3 - "$TOOLCHAINS_JSON" "$LATEST_CLANG" >/tmp/clang-versions.txt <<'PY'
+          import json
+          import sys
+
+          toolchains_path = sys.argv[1]
+          latest_clang = sys.argv[2]
+
+          with open(toolchains_path, encoding="utf-8") as fh:
+              toolchains = json.load(fh)
+
+          candidates = []
+          candidates.append(toolchains.get("default"))
+          candidates.append(toolchains.get("fallback"))
+          candidates.extend((toolchains.get("by_branch") or {}).values())
+          candidates.extend(toolchains.get("versions") or [])
+          candidates.append(latest_clang)
+
+          for clang in sorted({value for value in candidates if isinstance(value, str) and value.startswith("clang-r")}):
+              print(clang)
+          PY
+
+          echo "Configured Clang versions:"
+          cat /tmp/clang-versions.txt
+
+          CANDIDATE_REFS=(
+            "refs/heads/mirror-goog-main-llvm-toolchain-source"
+            "refs/heads/android16-release"
+            "refs/heads/android15-release"
+            "refs/heads/android14-release"
+            "refs/heads/android13-release"
+            "refs/heads/android12L-release"
+            "refs/heads/android12-release"
+            "refs/heads/main"
+            "refs/heads/master"
+          )
+
+          ref_has_clang() {
+            local ref="$1"
+            local clang="$2"
+            local url="${REPO_URL}/+/${ref}/${clang}?format=JSON"
+
+            curl -fsSL "$url" >/dev/null 2>&1
+          }
+
+          find_ref_for_clang() {
+            local clang="$1"
+            local ref
+
+            for ref in "${CANDIDATE_REFS[@]}"; do
+              echo "Probing $clang on $ref..." >&2
+
+              if ref_has_clang "$ref" "$clang"; then
+                printf '%s\n' "$ref"
+                return 0
+              fi
+            done
+
+            return 1
+          }
+
+          : > /tmp/clang-matrix.tsv
+
+          while IFS= read -r clang; do
+            case "$clang" in
+              clang-r*) ;;
+              *)
+                echo "Invalid clang version: $clang" >&2
+                exit 1
+                ;;
+            esac
+
+            ref="$(find_ref_for_clang "$clang" || true)"
+
+            if [ -z "${ref:-}" ]; then
+              echo "Could not find $clang in candidate AOSP refs." >&2
+              echo "Add the correct source ref to CANDIDATE_REFS." >&2
+              exit 1
+            fi
+
+            echo "Resolved $clang -> $ref"
+            printf '%s\t%s\n' "$clang" "$ref" >> /tmp/clang-matrix.tsv
+          done < /tmp/clang-versions.txt
+
+          python3 - /tmp/clang-matrix.tsv >/tmp/clang-matrix.json <<'PY'
+          import json
+          import sys
+
+          rows = []
+          with open(sys.argv[1], encoding="utf-8") as fh:
+              for line in fh:
+                  line = line.strip()
+                  if not line:
+                      continue
+                  clang, aosp_ref = line.split("\t", 1)
+                  rows.append({
+                      "clang": clang,
+                      "aosp_ref": aosp_ref,
+                  })
+
+          print(json.dumps(rows, separators=(",", ":")))
+          PY
+
+          echo "Resolved matrix:"
+          cat /tmp/clang-matrix.json
+          echo
+
+          echo "clang_matrix=$(cat /tmp/clang-matrix.json)" >> "$GITHUB_OUTPUT"
+
+  package:
+    name: Package ${{ matrix.clang }}
+    runs-on: ubuntu-24.04
+    needs: resolve
+    timeout-minutes: 120
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.resolve.outputs.clang_matrix) }}
+
+    steps:
+      - name: Disable IPv6
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.lo.disable_ipv6=1
+
+      - name: Check required tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tool in git sha256sum tar zstd; do
+            command -v "$tool" >/dev/null || {
+              echo "Missing required host tool: $tool" >&2
+              exit 1
+            }
+          done
+
+      - name: Sparse-fetch ${{ matrix.clang }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REPO_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
+          CLANG_VERSION="${{ matrix.clang }}"
+          AOSP_REF="${{ matrix.aosp_ref }}"
+
+          rm -rf /tmp/aosp-clang
+
+          git clone \
+            --depth=1 \
+            --filter=blob:none \
+            --no-checkout \
+            "$REPO_URL" \
+            /tmp/aosp-clang
+
+          cd /tmp/aosp-clang
+
+          git sparse-checkout init --cone
+          git sparse-checkout set "$CLANG_VERSION"
+
+          git fetch --depth=1 origin "$AOSP_REF"
+          git checkout --detach FETCH_HEAD
+
+          test -x "$CLANG_VERSION/bin/clang" || {
+            echo "Missing $CLANG_VERSION/bin/clang" >&2
+            exit 1
+          }
+
+          COMMIT="$(git rev-parse HEAD)"
+          SHORT_COMMIT="$(git rev-parse --short HEAD)"
+
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+
+          "$CLANG_VERSION/bin/clang" --version \
+            | tee "$GITHUB_WORKSPACE/dist/${CLANG_VERSION}-clang-version.txt"
+
+          cat > "$GITHUB_WORKSPACE/dist/${CLANG_VERSION}-build-info.txt" <<EOF
+          clang_version=${CLANG_VERSION}
+          aosp_ref=${AOSP_REF}
+          aosp_project=platform/prebuilts/clang/host/linux-x86
+          aosp_commit=${COMMIT}
+          source=configs/toolchains.json + latest Android Platform Clang
+          EOF
+
+          ARCHIVE="${CLANG_VERSION}-linux-x86-${SHORT_COMMIT}.tar.zst"
+
+          tar --zstd -cf "$GITHUB_WORKSPACE/dist/$ARCHIVE" \
+            "$CLANG_VERSION"
+
+          cd "$GITHUB_WORKSPACE/dist"
+          sha256sum "$ARCHIVE" > "${CLANG_VERSION}-SHA256SUMS"
+
+      - name: Upload packaged Clang
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-${{ matrix.clang }}
+          path: dist/*
+          retention-days: 1
+
+  release:
+    name: Release all Clang toolchains
+    runs-on: ubuntu-24.04
+    needs:
+      - resolve
+      - package
+    timeout-minutes: 60
+
+    steps:
+      - name: Disable IPv6
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.lo.disable_ipv6=1
+
+      - name: Check required tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v gh >/dev/null || {
+            echo "Missing required host tool: gh" >&2
+            exit 1
+          }
+
+      - name: Download all packaged Clang artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: clang-*
+          path: dist
+          merge-multiple: false
+
+      - name: Prepare combined release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-assets
+
+          find dist -type f -name '*.tar.zst' -exec cp -a {} release-assets/ \;
+          find dist -type f -name '*-SHA256SUMS' -exec cp -a {} release-assets/ \;
+          find dist -type f -name '*-clang-version.txt' -exec cp -a {} release-assets/ \;
+          find dist -type f -name '*-build-info.txt' -exec cp -a {} release-assets/ \;
+
+          {
+            echo "# AOSP Clang toolchains"
+            echo
+            echo "Generated from:"
+            echo
+            echo "- configs/toolchains.json"
+            echo "- latest Android Platform Clang from mirror-goog-main-llvm-toolchain-source"
+            echo
+            echo "Included archives:"
+            echo
+            find release-assets -maxdepth 1 -type f -name '*.tar.zst' -printf '- %f\n' | sort
+            echo
+            echo "SHA256:"
+            echo
+            cat release-assets/*-SHA256SUMS
+          } > release-assets/RELEASE_NOTES.md
+
+          {
+            echo "# Combined SHA256SUMS"
+            echo
+            cat release-assets/*-SHA256SUMS
+          } > release-assets/SHA256SUMS
+          echo "Prepared $(find release-assets -maxdepth 1 -type f | wc -l) release assets."
+
+      - name: Create single GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          TAG="aosp-clang-toolchains"
+          TITLE="AOSP Clang Toolchains"
+
+          # Keep this as one clean release. Delete/recreate to avoid stale old assets.
+          gh release delete "$TAG" --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh api --method DELETE "repos/$GH_REPO/git/refs/tags/$TAG" >/dev/null 2>&1 || true
+
+          gh release create "$TAG" \
+            release-assets/* \
+            --title "$TITLE" \
+            --notes-file release-assets/RELEASE_NOTES.md
