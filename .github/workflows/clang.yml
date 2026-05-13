@@ -80,27 +80,27 @@ jobs:
           echo "Resolved latest Android Platform Clang: $LATEST_CLANG"
 
           python3 - "$TOOLCHAINS_JSON" <<'PY' > /tmp/configured-clang-versions.txt
-import json
-import sys
+          import json
+          import sys
 
-path = sys.argv[1]
+          path = sys.argv[1]
 
-with open(path, "r", encoding="utf-8") as f:
-    data = json.load(f)
+          with open(path, "r", encoding="utf-8") as f:
+          data = json.load(f)
 
-versions = set()
+          versions = set()
 
-default = data.get("default")
-if isinstance(default, str) and default.startswith("clang-r"):
-    versions.add(default)
+          default = data.get("default")
+          if isinstance(default, str) and default.startswith("clang-r"):
+             versions.add(default)
 
-for value in data.get("by_branch", {}).values():
-    if isinstance(value, str) and value.startswith("clang-r"):
-        versions.add(value)
+          for value in data.get("by_branch", {}).values():
+          if isinstance(value, str) and value.startswith("clang-r"):
+             versions.add(value)
 
-for version in sorted(versions):
-    print(version)
-PY
+          for version in sorted(versions):
+          print(version)
+          PY
 
           {
             cat /tmp/configured-clang-versions.txt
