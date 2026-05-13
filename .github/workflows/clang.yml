@@ -16,8 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     outputs:
-      clang_versions: ${{ steps.resolve.outputs.clang_versions }}
-      aosp_ref: ${{ steps.resolve.outputs.aosp_ref }}
+      clang_matrix: ${{ steps.resolve.outputs.clang_matrix }}
 
     steps:
       - name: Checkout control branch
@@ -31,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y git python3
+          sudo apt-get install -y git jq
 
       - name: Resolve configured + latest AOSP Clang
         id: resolve
@@ -39,8 +38,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          AOSP_REF="mirror-goog-main-llvm-toolchain-source"
           REPO_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
+          MIRROR_REF="refs/heads/mirror-goog-main-llvm-toolchain-source"
           TOOLCHAINS_JSON="$GITHUB_WORKSPACE/configs/toolchains.json"
 
           test -f "$TOOLCHAINS_JSON" || {
@@ -48,17 +47,17 @@ jobs:
             exit 1
           }
 
-          rm -rf /tmp/aosp-clang
+          rm -rf /tmp/aosp-clang-readme /tmp/aosp-clang-probe
+
           git clone \
             --depth=1 \
             --filter=blob:none \
             --no-checkout \
-            --branch "$AOSP_REF" \
+            --branch "mirror-goog-main-llvm-toolchain-source" \
             "$REPO_URL" \
-            /tmp/aosp-clang
+            /tmp/aosp-clang-readme
 
-          cd /tmp/aosp-clang
-
+          cd /tmp/aosp-clang-readme
           git sparse-checkout init --cone
           git sparse-checkout set README.md
           git checkout
@@ -78,57 +77,64 @@ jobs:
           )"
 
           if [ -z "$LATEST_CLANG" ]; then
-            echo "Could not resolve Android Platform clang from README.md on $AOSP_REF" >&2
+            echo "Could not resolve Android Platform clang from README.md" >&2
             exit 1
           fi
 
           echo "Resolved latest Android Platform Clang: $LATEST_CLANG"
 
-          python3 - "$TOOLCHAINS_JSON" "$LATEST_CLANG" <<'PY' > /tmp/clang-versions.json
-          import json
-          import sys
+          {
+            jq -r '
+              [
+                .default?,
+                .fallback?,
+                ((.by_branch // {})[]?),
+                ((.versions // [])[]?)
+              ]
+              | .[]
+              | select(type == "string" and startswith("clang-r"))
+            ' "$TOOLCHAINS_JSON"
 
-          path = sys.argv[1]
-          latest = sys.argv[2]
+            printf '%s\n' "$LATEST_CLANG"
+          } | sort -u > /tmp/clang-versions.txt
 
-          with open(path, "r", encoding="utf-8") as f:
-              data = json.load(f)
-
-          versions = set()
-
-          for key in ("default", "fallback"):
-              value = data.get(key)
-              if isinstance(value, str) and value.startswith("clang-r"):
-                  versions.add(value)
-
-          by_branch = data.get("by_branch", {})
-          if isinstance(by_branch, dict):
-              for value in by_branch.values():
-                  if isinstance(value, str) and value.startswith("clang-r"):
-                      versions.add(value)
-
-          extra = data.get("versions", [])
-          if isinstance(extra, list):
-              for value in extra:
-                  if isinstance(value, str) and value.startswith("clang-r"):
-                      versions.add(value)
-
-          versions.add(latest)
-
-          print(json.dumps(sorted(versions)))
-          PY
-
-          python3 - <<'PY' /tmp/clang-versions.json > /tmp/clang-versions.txt
-          import json
-          import sys
-
-          with open(sys.argv[1], "r", encoding="utf-8") as f:
-              for item in json.load(f):
-                  print(item)
-          PY
-
-          echo "Will fetch/release:"
+          echo "Configured Clang versions:"
           cat /tmp/clang-versions.txt
+
+          git init -q /tmp/aosp-clang-probe
+          git -C /tmp/aosp-clang-probe remote add origin "$REPO_URL"
+
+          CANDIDATE_REFS=(
+            "refs/heads/mirror-goog-main-llvm-toolchain-source"
+            "refs/heads/master"
+            "refs/heads/main"
+            "refs/heads/android16-release"
+            "refs/heads/android15-release"
+            "refs/heads/android14-release"
+            "refs/tags/android-14.0.0_r33"
+            "refs/heads/android13-release"
+            "refs/heads/android12L-release"
+            "refs/heads/android12-release"
+            "refs/heads/android12L-gsi"
+          )
+
+          find_ref_for_clang() {
+            local clang="$1"
+            local ref
+
+            for ref in "${CANDIDATE_REFS[@]}"; do
+              if git -C /tmp/aosp-clang-probe fetch --depth=1 --quiet origin "$ref" 2>/dev/null; then
+                if git -C /tmp/aosp-clang-probe cat-file -e "FETCH_HEAD:${clang}" 2>/dev/null; then
+                  printf '%s\n' "$ref"
+                  return 0
+                fi
+              fi
+            done
+
+            return 1
+          }
+
+          : > /tmp/clang-matrix.tsv
 
           while IFS= read -r clang; do
             case "$clang" in
@@ -139,16 +145,33 @@ jobs:
                 ;;
             esac
 
-            if ! git ls-tree -d --name-only HEAD "$clang" | grep -qx "$clang"; then
-              echo "Clang directory does not exist on $AOSP_REF: $clang" >&2
+            ref="$(find_ref_for_clang "$clang" || true)"
+
+            if [ -z "${ref:-}" ]; then
+              echo "Could not find $clang in candidate AOSP refs" >&2
+              echo "Add the correct source ref to CANDIDATE_REFS." >&2
               exit 1
             fi
+
+            echo "$clang -> $ref"
+            printf '%s\t%s\n' "$clang" "$ref" >> /tmp/clang-matrix.tsv
           done < /tmp/clang-versions.txt
 
-          {
-            echo "clang_versions=$(cat /tmp/clang-versions.json)"
-            echo "aosp_ref=$AOSP_REF"
-          } >> "$GITHUB_OUTPUT"
+          jq -R -s -c '
+            split("\n")
+            | map(select(length > 0))
+            | map(split("\t"))
+            | map({
+                clang: .[0],
+                aosp_ref: .[1]
+              })
+          ' /tmp/clang-matrix.tsv > /tmp/clang-matrix.json
+
+          echo "Matrix:"
+          cat /tmp/clang-matrix.json
+          echo
+
+          echo "clang_matrix=$(cat /tmp/clang-matrix.json)" >> "$GITHUB_OUTPUT"
 
   package:
     name: Package ${{ matrix.clang }}
@@ -158,7 +181,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: ${{ fromJSON(needs.resolve.outputs.clang_versions) }}
+        include: ${{ fromJSON(needs.resolve.outputs.clang_matrix) }}
 
     steps:
       - name: Install dependencies
@@ -173,16 +196,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          AOSP_REF="${{ needs.resolve.outputs.aosp_ref }}"
-          CLANG_VERSION="${{ matrix.clang }}"
           REPO_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
+          CLANG_VERSION="${{ matrix.clang }}"
+          AOSP_REF="${{ matrix.aosp_ref }}"
 
           rm -rf /tmp/aosp-clang
+
           git clone \
             --depth=1 \
             --filter=blob:none \
             --no-checkout \
-            --branch "$AOSP_REF" \
             "$REPO_URL" \
             /tmp/aosp-clang
 
@@ -190,7 +213,9 @@ jobs:
 
           git sparse-checkout init --cone
           git sparse-checkout set "$CLANG_VERSION"
-          git checkout
+
+          git fetch --depth=1 origin "$AOSP_REF"
+          git checkout --detach FETCH_HEAD
 
           test -x "$CLANG_VERSION/bin/clang" || {
             echo "Missing $CLANG_VERSION/bin/clang" >&2
@@ -235,15 +260,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: ${{ fromJSON(needs.resolve.outputs.clang_versions) }}
+        include: ${{ fromJSON(needs.resolve.outputs.clang_matrix) }}
 
     steps:
-      - name: Install dependencies
+      - name: Check GitHub CLI
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y gh
+          gh --version
 
       - name: Download packaged Clang
         uses: actions/download-artifact@v4
