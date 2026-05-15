@@ -35,6 +35,13 @@ if [ ! -d "$WORKSPACE_DIR" ]; then
   exit 1
 fi
 
+WORKSPACE_DIR="$(cd "$WORKSPACE_DIR" && pwd)"
+
+if [ ! -d "$WORKSPACE_DIR/.repo" ]; then
+  echo "Workspace is not a repo manifest checkout: $WORKSPACE_DIR" >&2
+  exit 1
+fi
+
 eval "$(
   python3 - "$PROFILE_JSON" <<'PY'
 import json
@@ -52,7 +59,9 @@ for field in ("build_config", "bazel_target"):
         print(f"{field.upper()}=''")
         continue
     if not isinstance(value, str) or not value:
-        raise SystemExit(f"Profile field {field!r} must be a string or null")
+        raise SystemExit(
+            f"{profile_path}: profile field {field!r} must be a non-empty string or null"
+        )
     print(f"{field.upper()}={shlex.quote(value)}")
 PY
 )"
@@ -61,6 +70,10 @@ case "$BUILD_MODE" in
   google_build_sh)
     if [ -z "$BUILD_CONFIG" ]; then
       echo "Profile does not define build_config: $PROFILE_JSON" >&2
+      exit 1
+    fi
+    if [ ! -f "$WORKSPACE_DIR/$BUILD_CONFIG" ]; then
+      echo "BUILD_CONFIG not found in workspace: $WORKSPACE_DIR/$BUILD_CONFIG" >&2
       exit 1
     fi
     if [ ! -x "$WORKSPACE_DIR/build/build.sh" ]; then

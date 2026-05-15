@@ -1,6 +1,6 @@
 {
   "name": "android14-6.1-lts",
-  "manifest_branch": "common-android14-6.1",
+  "manifest_branch": "common-android14-6.1-lts",
   "kernel_source_branch": "android14-6.1-lts",
   "build_config": "common/build.config.gki.aarch64",
   "bazel_target": "//common:kernel_dist"

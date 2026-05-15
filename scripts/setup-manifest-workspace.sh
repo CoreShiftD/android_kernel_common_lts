@@ -5,9 +5,10 @@ usage() {
   cat <<'EOF'
 Usage: setup-manifest-workspace.sh <profile-json> <workspace-dir>
 
-Initializes an ACK manifest workspace, removes the manifest-provided
-kernel/common checkout via local manifest, then clones the requested
-kernel/common source branch into common/.
+Initializes an ACK workspace from https://android.googlesource.com/kernel/manifest,
+copies manifests/coreshift-overlay.xml into .repo/local_manifests/,
+syncs the manifest checkout, then clones the requested kernel/common
+source branch into common/.
 EOF
 }
 
@@ -55,15 +56,23 @@ with open(profile_path, encoding="utf-8") as fh:
 for field in ("manifest_branch", "kernel_source_branch"):
     value = profile.get(field)
     if not isinstance(value, str) or not value:
-        raise SystemExit(f"Profile field {field!r} must be a non-empty string")
+        raise SystemExit(
+            f"{profile_path}: profile field {field!r} must be a non-empty string"
+        )
     print(f"{field.upper()}={shlex.quote(value)}")
 PY
 )"
 
 mkdir -p "$WORKSPACE_DIR"
+WORKSPACE_DIR="$(cd "$WORKSPACE_DIR" && pwd)"
 
 (
   cd "$WORKSPACE_DIR"
+
+  if [ -e .repo ] && [ ! -d .repo ]; then
+    echo "Workspace has a non-directory .repo entry: $WORKSPACE_DIR" >&2
+    exit 1
+  fi
 
   repo init \
     -u "$MANIFEST_URL" \
@@ -72,6 +81,11 @@ mkdir -p "$WORKSPACE_DIR"
 
   mkdir -p .repo/local_manifests
   cp "$OVERLAY_SOURCE" .repo/local_manifests/coreshift-overlay.xml
+
+  if [ ! -f .repo/local_manifests/coreshift-overlay.xml ]; then
+    echo "Failed to install local manifest overlay in workspace: $WORKSPACE_DIR" >&2
+    exit 1
+  fi
 
   repo sync \
     -c \
@@ -86,4 +100,9 @@ mkdir -p "$WORKSPACE_DIR"
     --branch "$KERNEL_SOURCE_BRANCH" \
     "$KERNEL_COMMON_URL" \
     common
+
+  if [ ! -d common/.git ]; then
+    echo "Failed to clone kernel/common branch $KERNEL_SOURCE_BRANCH into $WORKSPACE_DIR/common" >&2
+    exit 1
+  fi
 )

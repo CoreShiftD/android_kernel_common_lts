@@ -1,0 +1,78 @@
+name: Validate manifest workspace tooling
+
+on:
+  push:
+    paths:
+      - ".github/workflows/**"
+      - "manifests/**"
+      - "profiles/**"
+      - "scripts/**"
+      - "README.md"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "manifests/**"
+      - "profiles/**"
+      - "scripts/**"
+      - "README.md"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/setup-manifest-workspace.sh
+          bash -n scripts/run-manifest-build.sh
+
+      - name: Validate profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/validate-profiles.py
+
+      - name: Check stale toolchains references
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import sys
+
+          root = pathlib.Path.cwd()
+          needle = "configs/" + "toolchains.json"
+          paths = [
+              root / ".github",
+              root / "scripts",
+              root / "manifests",
+              root / "profiles",
+              root / "README.md",
+          ]
+
+          matches = []
+          for path in paths:
+              if path.is_dir():
+                  for candidate in sorted(path.rglob("*")):
+                      if not candidate.is_file():
+                          continue
+                      text = candidate.read_text(encoding="utf-8")
+                      if needle in text:
+                          matches.append(candidate.relative_to(root))
+              elif path.is_file():
+                  text = path.read_text(encoding="utf-8")
+                  if needle in text:
+                      matches.append(path.relative_to(root))
+
+          if matches:
+              print("stale legacy toolchain path reference found:", file=sys.stderr)
+              for match in matches:
+                  print(match, file=sys.stderr)
+              raise SystemExit(1)
+          PY
