@@ -160,6 +160,21 @@ You can also prepare `ccache` locally before building:
 ccache -s
 ```
 
+### Ccache notes
+
+`ccache` hits depend on:
+
+- The same profile
+- The same source revision
+- The same compiler or toolchain content
+- The same relevant compiler flags
+- Stable paths, helped by `CCACHE_BASEDIR` and `CCACHE_NOHASHDIR`
+- The build backend actually invoking compilers through `ccache`
+
+The first run will mostly miss. A second run on the same profile and source should hit more often.
+
+If `ccache -s` shows `Cacheable calls` as zero, the compiler is not going through `ccache` yet. In that case, the next step is adding explicit compiler wrapper support, not changing cache keys.
+
 Scope:
 
 This produces ACK/GKI kernel build artifacts. Device-specific `boot`, `vendor_boot`, or AnyKernel-style packaging is separate and requires device-specific configuration.
@@ -211,7 +226,7 @@ The GitHub Actions workflows install required host/build tools automatically bef
 
 They install the latest versions available from the configured Ubuntu runner apt repositories after `apt-get update`. This prepares host tooling, the Android `repo` launcher, Arm64 cross libc headers, `ccache`, and common kernel build dependencies, but it does not override the ACK/AOSP Clang selected by the Google manifest.
 
-The workflows also restore and save `~/.cache/ccache` with `actions/cache`, run `./scripts/setup-ccache.sh`, and print `ccache -s` before and after each build.
+The workflows also restore and save `~/.cache/ccache` with `actions/cache`, run `./scripts/setup-ccache.sh`, and print `ccache -s` plus `ccache --show-config` before and after each build.
 
 They also add a 16GB swap file before kernel compilation.
 

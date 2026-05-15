@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
-          key: ccache-${{ runner.os }}-${{ matrix.profile }}-${{ github.ref_name }}
+          key: ccache-${{ runner.os }}-${{ matrix.profile }}-${{ hashFiles('profiles/*.json', 'scripts/**', 'configs/fragments/coreshift.fragment') }}
           restore-keys: |
             ccache-${{ runner.os }}-${{ matrix.profile }}-
             ccache-${{ runner.os }}-
@@ -52,7 +52,9 @@ jobs:
 
       - name: Ccache stats before build
         shell: bash
-        run: ccache -s || true
+        run: |
+          ccache -s || true
+          ccache --show-config || true
 
       - name: Build kernel
         shell: bash
@@ -68,7 +70,9 @@ jobs:
       - name: Ccache stats after build
         if: always()
         shell: bash
-        run: ccache -s || true
+        run: |
+          ccache -s || true
+          ccache --show-config || true
 
       - name: Upload kernel artifacts
         uses: actions/upload-artifact@v4

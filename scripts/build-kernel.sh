@@ -44,6 +44,30 @@ BUILD_ENV_KEYS=()
 USER_SET_UAPI_SYSROOT_CFLAGS=0
 EXTRA_ARGS=()
 
+build_env_has_key() {
+  local key="$1"
+  local existing_key
+  for existing_key in "${BUILD_ENV_KEYS[@]}"; do
+    if [ "$existing_key" = "$key" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+append_build_env_if_unset() {
+  local key="$1"
+  local value="${!key:-}"
+  if [ -z "$value" ]; then
+    return 0
+  fi
+  if build_env_has_key "$key"; then
+    return 0
+  fi
+  BUILD_ENV+=("$key=$value")
+  BUILD_ENV_KEYS+=("$key")
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --workspace)
@@ -209,6 +233,17 @@ if [ "$is_54_profile" -eq 1 ]; then
     echo "Auto-added UAPI_SYSROOT_CFLAGS for 5.4 header tests: /usr/aarch64-linux-gnu/include"
   fi
 fi
+
+for passthrough_key in \
+  CCACHE_DIR \
+  CCACHE_BASEDIR \
+  CCACHE_NOHASHDIR \
+  CCACHE_COMPILERCHECK \
+  CCACHE_SLOPPINESS \
+  USE_CCACHE
+do
+  append_build_env_if_unset "$passthrough_key"
+done
 
 mapfile -t profile_build_fields < <(
   python3 - "$PROFILE_JSON" <<'PY'
