@@ -1,0 +1,138 @@
+name: Build kernel template
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: "Builder repository to clone into builder/"
+        required: false
+        default: "CoreShiftD/android_kernel_common_lts"
+        type: string
+      ref:
+        description: "Builder repository ref"
+        required: false
+        default: "main"
+        type: string
+      profile:
+        description: "Build profile from profiles/*.json"
+        required: true
+        type: string
+      mode:
+        description: "Build backend mode passed to scripts/build-kernel.sh"
+        required: false
+        default: "auto"
+        type: string
+      private_fragment:
+        description: "Optional repo-root private.fragment content"
+        required: false
+        default: ""
+        type: string
+      disable_defconfig_check:
+        description: "Private-build escape hatch for check_defconfig"
+        required: false
+        default: "off"
+        type: string
+      disable_kmi_check:
+        description: "Private-build escape hatch for KMI strictness"
+        required: false
+        default: "off"
+        type: string
+      build_env:
+        description: "Optional build env KEY=VALUE lines passed to build-kernel.sh. One per line. No export or shell syntax."
+        required: false
+        default: ""
+        type: string
+      extra_args:
+        description: "Optional extra backend args. Simple whitespace splitting only."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout builder repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          path: builder
+
+      - name: Write private.fragment
+        if: ${{ inputs.private_fragment != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd builder
+          cat > private.fragment <<'EOF_PRIVATE_FRAGMENT'
+          ${{ inputs.private_fragment }}
+          EOF_PRIVATE_FRAGMENT
+
+      - name: Build kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # This workflow is only a thin template wrapper.
+          # Real build logic lives in scripts/build-kernel.sh.
+          build_env_args=()
+
+          while IFS= read -r line; do
+            line="${line#"${line%%[![:space:]]*}"}"
+            line="${line%"${line##*[![:space:]]}"}"
+
+            [ -n "$line" ] || continue
+
+            case "$line" in
+              \#*) continue ;;
+            esac
+
+            if [[ "$line" == export\ * ]]; then
+              echo "::error::build_env lines must be KEY=VALUE only, without export: $line"
+              exit 1
+            fi
+
+            if [[ "$line" != *=* ]]; then
+              echo "::error::Invalid build_env line, expected KEY=VALUE: $line"
+              exit 1
+            fi
+
+            key="${line%%=*}"
+
+            if ! [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+              echo "::error::Invalid build_env key: $key"
+              exit 1
+            fi
+
+            build_env_args+=(--build-env "$line")
+          done <<'EOF_BUILD_ENV'
+          ${{ inputs.build_env }}
+          EOF_BUILD_ENV
+
+          extra_args=()
+          if [ -n "${{ inputs.extra_args }}" ]; then
+            # Simple whitespace splitting is acceptable for this template.
+            # For complex quoting, users should edit the workflow directly.
+            read -r -a extra_args <<< "${{ inputs.extra_args }}"
+          fi
+
+          cd builder
+
+          ./scripts/build-kernel.sh "${{ inputs.profile }}" \
+            --mode "${{ inputs.mode }}" \
+            --disable-defconfig-check "${{ inputs.disable_defconfig_check }}" \
+            --disable-kmi-check "${{ inputs.disable_kmi_check }}" \
+            "${build_env_args[@]}" \
+            -- "${extra_args[@]}"
+
+      - name: Upload kernel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ inputs.profile }}-${{ github.run_number }}
+          path: builder/dist/${{ inputs.profile }}/
+          if-no-files-found: error

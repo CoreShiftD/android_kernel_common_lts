@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [-- EXTRA_BUILD_ARGS...]
+Usage: scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
 
 Builds an ACK/GKI kernel for the named profile using the manifest workspace helpers.
 
@@ -39,6 +39,8 @@ SKIP_SETUP=0
 CLEAN=0
 DISABLE_DEFCONFIG_CHECK="off"
 DISABLE_KMI_CHECK="off"
+BUILD_ENV=()
+BUILD_ENV_KEYS=()
 EXTRA_ARGS=()
 
 while [ "$#" -gt 0 ]; do
@@ -81,6 +83,24 @@ while [ "$#" -gt 0 ]; do
         exit 1
       fi
       DISABLE_KMI_CHECK="$2"
+      shift 2
+      ;;
+    --build-env)
+      if [ "$#" -lt 2 ]; then
+        echo "Missing value for --build-env" >&2
+        exit 1
+      fi
+      if [[ "$2" != *=* ]]; then
+        echo "Invalid --build-env value, expected KEY=VALUE: $2" >&2
+        exit 1
+      fi
+      build_env_key="${2%%=*}"
+      if ! [[ "$build_env_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        echo "Invalid --build-env key: $build_env_key" >&2
+        exit 1
+      fi
+      BUILD_ENV+=("$2")
+      BUILD_ENV_KEYS+=("$build_env_key")
       shift 2
       ;;
     --)
@@ -165,10 +185,9 @@ fi
 
 "$REPO_ROOT/scripts/prepare-private-fragment.sh" "$PROFILE_JSON" "$WORKSPACE_DIR"
 
-eval "$(
+mapfile -t profile_build_fields < <(
   python3 - "$PROFILE_JSON" <<'PY'
 import json
-import shlex
 import sys
 
 profile_path = sys.argv[1]
@@ -179,15 +198,18 @@ with open(profile_path, encoding="utf-8") as fh:
 for field in ("build_config", "bazel_target"):
     value = profile.get(field)
     if value is None:
-        print(f"{field.upper()}=''")
+        print("")
     elif isinstance(value, str) and value:
-        print(f"{field.upper()}={shlex.quote(value)}")
+        print(value)
     else:
         raise SystemExit(
             f"{profile_path}: profile field {field!r} must be a non-empty string or null"
         )
 PY
-)"
+)
+
+BUILD_CONFIG="${profile_build_fields[0]:-}"
+BAZEL_TARGET="${profile_build_fields[1]:-}"
 
 resolve_mode() {
   if [ "$MODE" != "auto" ]; then
@@ -234,14 +256,25 @@ if [ "$SELECTED_MODE" = "google_build_sh" ] && [ -f "$WORKSPACE_DIR/common/build
   BUILD_CONFIG_OVERRIDE_VALUE="common/build.config.coreshift.gki.aarch64"
 fi
 
-OUT_DIR="$WORKSPACE_DIR/out" \
-DIST_DIR="$WORKSPACE_DIR/dist" \
-BUILD_CONFIG_OVERRIDE="$BUILD_CONFIG_OVERRIDE_VALUE" \
-  "$REPO_ROOT/scripts/run-manifest-build.sh" \
-  "$PROFILE_JSON" \
-  "$WORKSPACE_DIR" \
-  "$SELECTED_MODE" \
+run_cmd=(
+  "$REPO_ROOT/scripts/run-manifest-build.sh"
+  "$PROFILE_JSON"
+  "$WORKSPACE_DIR"
+  "$SELECTED_MODE"
   "${EXTRA_ARGS[@]}"
+)
+
+env_cmd=(
+  "OUT_DIR=$WORKSPACE_DIR/out"
+  "DIST_DIR=$WORKSPACE_DIR/dist"
+  "BUILD_CONFIG_OVERRIDE=$BUILD_CONFIG_OVERRIDE_VALUE"
+)
+
+if [ "${#BUILD_ENV[@]}" -gt 0 ]; then
+  env "${BUILD_ENV[@]}" "${env_cmd[@]}" "${run_cmd[@]}"
+else
+  env "${env_cmd[@]}" "${run_cmd[@]}"
+fi
 
 "$REPO_ROOT/scripts/collect-artifacts.sh" "$PROFILE_NAME" "$WORKSPACE_DIR" "$ARTIFACT_DIR"
 
@@ -253,4 +286,12 @@ echo "  build mode: $SELECTED_MODE"
 echo "  artifacts: $ARTIFACT_DIR"
 if [ -n "$BUILD_CONFIG_OVERRIDE_VALUE" ]; then
   echo "  build config override: $BUILD_CONFIG_OVERRIDE_VALUE"
+fi
+if [ "${#BUILD_ENV_KEYS[@]}" -gt 0 ]; then
+  echo "  build env:"
+  for key in "${BUILD_ENV_KEYS[@]}"; do
+    echo "    $key"
+  done
+else
+  echo "  build env: none"
 fi

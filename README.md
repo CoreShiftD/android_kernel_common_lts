@@ -89,7 +89,16 @@ This entrypoint will:
 Usage:
 
 ```bash
-scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [-- EXTRA_BUILD_ARGS...]
+scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
+```
+
+Local build environment passthrough:
+
+```bash
+./scripts/build-kernel.sh android13-5.15-lts \
+  --build-env LTO=full \
+  --build-env SKIP_MRPROPER=1 \
+  --build-env SKIP_EXT_MODULES=1
 ```
 
 Required host tools:
@@ -133,6 +142,30 @@ For local experimentation, `build-kernel.sh` exposes:
 - `--disable-kmi-check on|off`
 
 These are explicit private-build escape hatches. They do not guarantee device safety, ABI stability, or KMI compatibility.
+
+### GitHub Actions template
+
+The repo includes a thin template workflow at `.github/workflows/Build.yml`. It checks out the selected builder repository into `builder/`, optionally writes a repo-root `private.fragment`, calls `./scripts/build-kernel.sh`, and uploads only `builder/dist/<profile>/`.
+
+`build_env` accepts one `KEY=VALUE` entry per line:
+
+```text
+LTO=full
+SKIP_MRPROPER=1
+SKIP_EXT_MODULES=1
+```
+
+Rules:
+
+- No `export`
+- No shell syntax
+- No semicolons
+- Empty values are allowed
+- Values are passed to the selected backend
+- For `google_build_sh`, they reach Google `build/build.sh`
+- For complex backend arguments, use `extra_args` or edit the workflow directly
+
+Local repo-root `private.fragment` is ignored by git and is not automatically available to GitHub Actions. For Actions builds, paste the fragment into the `private_fragment` workflow input or customize your fork.
 
 ## Related workflows
 
