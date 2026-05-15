@@ -177,7 +177,9 @@ Rules:
 
 Local repo-root `private.fragment` is ignored by git and is not automatically available to GitHub Actions. For Actions builds, paste the fragment into the `private_fragment` workflow input or customize your fork.
 
-`disable_defconfig_check` defaults to `off` and `disable_kmi_check` defaults to `off`. Enable them only for private/custom builds when ACK checks block expected changes. They do not guarantee device safety, ABI stability, or KMI compatibility.
+`disable_defconfig_check` is a boolean input that defaults to `false`, and `disable_kmi_check` is a boolean input that defaults to `false`. In the workflow, `true` maps to the script value `on`, and `false` maps to `off`.
+
+Enable them only for private/custom builds when ACK checks block expected changes. They do not guarantee device safety, ABI stability, or KMI compatibility.
 
 Advanced users can still run locally with the full script surface:
 
@@ -189,6 +191,12 @@ Advanced users can still run locally with the full script surface:
   --build-env LTO=full \
   -- EXTRA_BACKEND_ARGS
 ```
+
+### Build-All workflow
+
+The repo also includes `.github/workflows/Build-All.yml`, a no-option matrix workflow that builds every profile in `profiles/*.json` and uploads one artifact per profile.
+
+It is intended for batch validation, not customization, and can be expensive because it runs many kernel builds. Per-profile customization belongs in `Build.yml` or direct local use of `scripts/build-kernel.sh`.
 
 ## Related workflows
 

@@ -26,19 +26,13 @@ on:
       disable_defconfig_check:
         description: "Disable defconfig normalization check for private/custom builds."
         required: true
-        default: "off"
-        type: choice
-        options:
-          - off
-          - on
+        default: false
+        type: boolean
       disable_kmi_check:
         description: "Disable strict KMI checks for private/custom builds."
         required: true
-        default: "off"
-        type: choice
-        options:
-          - off
-          - on
+        default: false
+        type: boolean
       build_env:
         description: "Optional build env KEY=VALUE lines. One per line. Advanced users only."
         required: false
@@ -78,6 +72,16 @@ jobs:
           # Advanced users can edit this workflow or run scripts/build-kernel.sh manually.
           # The two disable checks are explicit private-build escape hatches and default to off.
           build_env_args=()
+          defconfig_check_arg="off"
+          kmi_check_arg="off"
+
+          if [ "${{ inputs.disable_defconfig_check }}" = "true" ]; then
+            defconfig_check_arg="on"
+          fi
+
+          if [ "${{ inputs.disable_kmi_check }}" = "true" ]; then
+            kmi_check_arg="on"
+          fi
 
           while IFS= read -r line; do
             line="${line#"${line%%[![:space:]]*}"}"
@@ -112,8 +116,8 @@ jobs:
           EOF_BUILD_ENV
 
           ./scripts/build-kernel.sh "${{ inputs.profile }}" \
-            --disable-defconfig-check "${{ inputs.disable_defconfig_check }}" \
-            --disable-kmi-check "${{ inputs.disable_kmi_check }}" \
+            --disable-defconfig-check "$defconfig_check_arg" \
+            --disable-kmi-check "$kmi_check_arg" \
             "${build_env_args[@]}"
 
       - name: Upload kernel artifacts
