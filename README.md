@@ -108,11 +108,13 @@ Required host tools:
 - `repo`
 - Standard Android kernel build dependencies supplied by the ACK manifest/tooling
 
-If `repo` is not already installed locally, you can install it with:
+For local builds, you can install the required host tooling with:
 
 ```bash
-./scripts/install-repo-tool.sh
+./scripts/install-build-tools.sh
 ```
+
+This installs host tooling, the `repo` launcher, Arm64 cross libc headers, and common kernel build dependencies from the current Ubuntu package sources. It does not override the ACK/AOSP Clang selected by the synced Google kernel manifest.
 
 Scope:
 
@@ -161,7 +163,9 @@ The repo includes a beginner-friendly template workflow at `.github/workflows/Bu
 
 It checks out the current repository, optionally writes a repo-root `private.fragment`, calls `./scripts/build-kernel.sh`, and uploads only `dist/<profile>/`.
 
-The GitHub Actions workflows install the Android `repo` tool automatically before invoking `scripts/build-kernel.sh`.
+The GitHub Actions workflows install required host/build tools automatically before invoking `scripts/build-kernel.sh`.
+
+They install the latest versions available from the configured Ubuntu runner apt repositories after `apt-get update`. This prepares host tooling, the Android `repo` launcher, Arm64 cross libc headers, and common kernel build dependencies, but it does not override the ACK/AOSP Clang selected by the Google manifest.
 
 The default workflow intentionally does not expose `repository`, `ref`, `mode`, or `extra_args`. Advanced users can edit `Build.yml` directly or run `scripts/build-kernel.sh` manually.
 
@@ -213,6 +217,8 @@ Local CLI behavior remains unchanged unless you explicitly pass:
 The repo also includes `.github/workflows/Build-All.yml`, a no-option matrix workflow that builds every profile in `profiles/*.json` and uploads one artifact per profile.
 
 It is intended for batch validation, not customization, and can be expensive because it runs many kernel builds. It also disables the defconfig normalization check by default for every matrix build. Per-profile customization belongs in `Build.yml` or direct local use of `scripts/build-kernel.sh`.
+
+Device-specific packaging dependencies remain separate from this host-tool installer.
 
 ## Related workflows
 

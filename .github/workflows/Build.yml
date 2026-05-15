@@ -52,9 +52,9 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install repo tool
+      - name: Install build tools
         shell: bash
-        run: ./scripts/install-repo-tool.sh
+        run: ./scripts/install-build-tools.sh
 
       - name: Write private.fragment
         if: ${{ inputs.private_fragment != '' }}
