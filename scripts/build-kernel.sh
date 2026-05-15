@@ -387,12 +387,17 @@ fi
 if [ "$SELECTED_MODE" = "google_build_sh" ] && command -v ccache >/dev/null 2>&1; then
   # shellcheck source=/dev/null
   . "$REPO_ROOT/scripts/setup-ccache-wrappers.sh" "$WORKSPACE_DIR"
-  append_passthrough_build_env_if_unset "CCACHE_WRAPPER_DIR"
-  append_passthrough_build_env_if_unset "CCACHE_PATH"
-  echo "google_build_sh compiler diagnostics:"
-  command -v clang
-  clang --version | head -n 1 || true
-  ccache -s || true
+  append_passthrough_build_env_if_unset "CORESHIFT_CCACHE_WRAPPERS_ENABLED"
+  if [ "${CORESHIFT_CCACHE_WRAPPERS_ENABLED:-0}" = "1" ]; then
+    append_passthrough_build_env_if_unset "CCACHE_WRAPPER_DIR"
+    append_passthrough_build_env_if_unset "CCACHE_PATH"
+    echo "google_build_sh compiler diagnostics:"
+    command -v clang
+    clang --version | head -n 1 || true
+    ccache -s || true
+  else
+    echo "ccache wrappers disabled; continuing without compiler interception."
+  fi
 fi
 
 if [ "$DISABLE_DEFCONFIG_CHECK" = "on" ]; then

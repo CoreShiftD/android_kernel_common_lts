@@ -94,13 +94,19 @@ case "$BUILD_MODE" in
     fi
     (
       cd "$WORKSPACE_DIR"
+      echo "CORESHIFT_CCACHE_WRAPPERS_ENABLED=${CORESHIFT_CCACHE_WRAPPERS_ENABLED:-}"
       echo "PATH=$PATH"
       echo "CCACHE_DIR=${CCACHE_DIR:-}"
       echo "CCACHE_WRAPPER_DIR=${CCACHE_WRAPPER_DIR:-}"
       echo "CCACHE_PATH=${CCACHE_PATH:-}"
       command -v clang
       readlink -f "$(command -v clang)" || true
-      clang --version | head -n 1 || true
+      clang_version_output="$(clang --version 2>/dev/null | head -n 3 || true)"
+      printf '%s\n' "$clang_version_output"
+      if [ "${CORESHIFT_CCACHE_WRAPPERS_ENABLED:-0}" = "1" ] && printf '%s\n' "$clang_version_output" | grep -Fq "Ubuntu clang"; then
+        echo "ccache wrapper resolved to system Ubuntu clang; refusing to build with wrong compiler." >&2
+        exit 1
+      fi
       pre_build_ccache_stats="$(ccache -s 2>/dev/null || true)"
       printf '%s\n' "$pre_build_ccache_stats"
       ccache_warn_if_no_cacheable_calls "$pre_build_ccache_stats"

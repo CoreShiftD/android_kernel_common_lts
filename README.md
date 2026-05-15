@@ -214,12 +214,16 @@ Examples:
 
 The first run will mostly miss. A second run on the same profile and source should hit more often.
 
-For `google_build_sh`, CoreShift now uses wrapper symlinks so `clang`, `clang++`, `gcc`, `g++`, `cc`, and `c++` resolve through `ccache` before the repo-synced toolchains in `PATH`.
+For `google_build_sh`, CoreShift now uses wrapper symlinks so `clang`, `clang++`, `gcc`, `g++`, `cc`, and `c++` resolve through `ccache` before the repo-synced toolchains in `PATH`. Those wrappers are only enabled when a repo/AOSP clang is found inside the prepared workspace.
+
+The wrapper must resolve to repo/AOSP clang, not Ubuntu clang. If no repo clang is found, CoreShift disables wrappers and continues without ccache interception.
 
 If `ccache -s` shows only cache size information and no cacheable calls, the compiler is still not going through `ccache`. In that case, inspect:
 
 ```bash
 command -v clang
+clang --version
+printf '%s\n' "${CCACHE_PATH:-}"
 readlink -f "$(command -v clang)"
 ccache -s
 ```
