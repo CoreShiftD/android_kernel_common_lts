@@ -69,6 +69,7 @@ PY
 case "$BUILD_MODE" in
   google_build_sh)
     selected_build_config="${BUILD_CONFIG_OVERRIDE:-$BUILD_CONFIG}"
+    jobs="${CORESHIFT_JOBS:-}"
     if [ -z "$selected_build_config" ]; then
       echo "Profile does not define build_config: $PROFILE_JSON" >&2
       exit 1
@@ -83,7 +84,20 @@ case "$BUILD_MODE" in
     fi
     (
       cd "$WORKSPACE_DIR"
-      BUILD_CONFIG="$selected_build_config" build/build.sh "$@"
+      echo "selected BUILD_CONFIG=$selected_build_config"
+      echo "LTO=${LTO:-}"
+      echo "CORESHIFT_JOBS=${CORESHIFT_JOBS:-}"
+      echo "MAKEFLAGS=${MAKEFLAGS:-}"
+      echo "SKIP_HEADERS_INSTALL=${SKIP_HEADERS_INSTALL:-}"
+      echo "SKIP_EXT_MODULES=${SKIP_EXT_MODULES:-}"
+      echo "SKIP_CP_KERNEL_HDRS=${SKIP_CP_KERNEL_HDRS:-}"
+      echo "LLVM_PARALLEL_LINK_JOBS=${LLVM_PARALLEL_LINK_JOBS:-}"
+      echo "LLD_PARALLEL_LINK_JOBS=${LLD_PARALLEL_LINK_JOBS:-}"
+      if [ -n "$jobs" ]; then
+        BUILD_CONFIG="$selected_build_config" build/build.sh -j"$jobs" "$@"
+      else
+        BUILD_CONFIG="$selected_build_config" build/build.sh "$@"
+      fi
     )
     ;;
   kleaf)

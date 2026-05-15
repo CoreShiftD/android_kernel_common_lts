@@ -124,7 +124,7 @@ CORESHIFT_APT_UPGRADE=1 ./scripts/install-build-tools.sh
 
 That is slower and less reproducible than the default update-and-install path.
 
-For `android*-5.4-lts` profiles, `scripts/build-kernel.sh` patches `common/usr/include/Makefile` in the prepared workspace so exported UAPI header tests append `UAPI_SYSROOT_CFLAGS`. By default, that points at `/usr/aarch64-linux-gnu/include`, which helps old 5.4 header tests find libc headers such as `sys/time.h`. GitHub Actions workflows get the needed cross libc packages through `./scripts/install-build-tools.sh`.
+For `android*-5.4-lts` profiles, `scripts/build-kernel.sh` can patch `common/usr/include/Makefile` in the prepared workspace so exported UAPI header tests append `UAPI_SYSROOT_CFLAGS`. When header install/tests are enabled, the default sysroot points at `/usr/aarch64-linux-gnu/include`, which helps old 5.4 header tests find libc headers such as `sys/time.h`. GitHub Actions workflows get the needed cross libc packages through `./scripts/install-build-tools.sh`.
 
 You can still override that explicitly:
 
@@ -134,6 +134,23 @@ You can still override that explicitly:
 ```
 
 This does not use environment `UAPI_CFLAGS` directly, because the kernel `common/usr/include/Makefile` defines `UAPI_CFLAGS` internally and an env override is not reliable.
+
+For `google_build_sh` private builds, the old CoreShift-safe defaults are now applied unless you override them with `--build-env`:
+
+- `SKIP_MRPROPER=1`
+- `SKIP_CP_KERNEL_HDRS=1`
+- `SKIP_UNSTRIPPED_MODULES=1`
+- `SKIP_DEBUG_INFO=1`
+- `SKIP_EXT_MODULES=1`
+- `SKIP_HEADERS_INSTALL=1`
+
+This matches the old working CoreShift-GKI behavior where applicable. Header install/tests are skipped by default on the `google_build_sh` path. To run strict header tests anyway, pass:
+
+```bash
+./scripts/build-kernel.sh android12-5.4-lts --build-env SKIP_HEADERS_INSTALL=0
+```
+
+On 5.4 profiles, that also re-enables the UAPI sysroot patching path and default `UAPI_SYSROOT_CFLAGS` wiring.
 
 This is separate from skipping header install/tests. If you intentionally want the fast/private path, you can still pass:
 
@@ -158,6 +175,30 @@ You can also prepare `ccache` locally before building:
 
 ```bash
 ccache -s
+```
+
+For `google_build_sh`, default LTO is `thin` unless you pass `LTO` yourself. Default jobs are always kept at 4:
+
+- `CORESHIFT_JOBS=4`
+- `MAKEFLAGS=-j4`
+
+If you switch to `LTO=full`, compile jobs still stay at 4. Only LLVM/LLD link parallelism is throttled by default:
+
+- `LLVM_PARALLEL_LINK_JOBS=1`
+- `LLD_PARALLEL_LINK_JOBS=1`
+
+You can override any of these with `--build-env KEY=VALUE`.
+
+Examples:
+
+```bash
+./scripts/build-kernel.sh android13-5.15-lts
+
+./scripts/build-kernel.sh android13-5.15-lts \
+  --build-env LTO=full
+
+./scripts/build-kernel.sh android12-5.4-lts \
+  --build-env SKIP_HEADERS_INSTALL=0
 ```
 
 ### Ccache notes
