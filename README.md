@@ -145,7 +145,17 @@ These are explicit private-build escape hatches. They do not guarantee device sa
 
 ### GitHub Actions template
 
-The repo includes a thin template workflow at `.github/workflows/Build.yml`. It checks out the selected builder repository into `builder/`, optionally writes a repo-root `private.fragment`, calls `./scripts/build-kernel.sh`, and uploads only `builder/dist/<profile>/`.
+The repo includes a beginner-friendly template workflow at `.github/workflows/Build.yml`. It intentionally exposes only:
+
+- `profile`
+- `private_fragment`
+- `build_env`
+- `disable_defconfig_check`
+- `disable_kmi_check`
+
+It checks out the current repository, optionally writes a repo-root `private.fragment`, calls `./scripts/build-kernel.sh`, and uploads only `dist/<profile>/`.
+
+The default workflow intentionally does not expose `repository`, `ref`, `mode`, or `extra_args`. Advanced users can edit `Build.yml` directly or run `scripts/build-kernel.sh` manually.
 
 `build_env` accepts one `KEY=VALUE` entry per line:
 
@@ -163,9 +173,22 @@ Rules:
 - Empty values are allowed
 - Values are passed to the selected backend
 - For `google_build_sh`, they reach Google `build/build.sh`
-- For complex backend arguments, use `extra_args` or edit the workflow directly
+- For complex backend arguments, edit the workflow directly or run the script locally
 
 Local repo-root `private.fragment` is ignored by git and is not automatically available to GitHub Actions. For Actions builds, paste the fragment into the `private_fragment` workflow input or customize your fork.
+
+`disable_defconfig_check` defaults to `off` and `disable_kmi_check` defaults to `off`. Enable them only for private/custom builds when ACK checks block expected changes. They do not guarantee device safety, ABI stability, or KMI compatibility.
+
+Advanced users can still run locally with the full script surface:
+
+```bash
+./scripts/build-kernel.sh android13-5.15-lts \
+  --mode google_build_sh \
+  --disable-defconfig-check on \
+  --disable-kmi-check on \
+  --build-env LTO=full \
+  -- EXTRA_BACKEND_ARGS
+```
 
 ## Related workflows
 

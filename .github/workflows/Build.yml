@@ -1,49 +1,46 @@
-name: Build kernel template
+name: Build ACK/GKI kernel
 
 on:
   workflow_dispatch:
     inputs:
-      repository:
-        description: "Builder repository to clone into builder/"
-        required: false
-        default: "CoreShiftD/android_kernel_common_lts"
-        type: string
-      ref:
-        description: "Builder repository ref"
-        required: false
-        default: "main"
-        type: string
       profile:
-        description: "Build profile from profiles/*.json"
+        description: "ACK/GKI LTS profile"
         required: true
-        type: string
-      mode:
-        description: "Build backend mode passed to scripts/build-kernel.sh"
-        required: false
-        default: "auto"
-        type: string
+        default: "android12-5.4-lts"
+        type: choice
+        options:
+          - android11-5.4-lts
+          - android12-5.4-lts
+          - android12-5.10-lts
+          - android13-5.10-lts
+          - android13-5.15-lts
+          - android14-5.15-lts
+          - android14-6.1-lts
+          - android15-6.6-lts
+          - android16-6.12-lts
       private_fragment:
-        description: "Optional repo-root private.fragment content"
+        description: "Optional Kconfig fragment content layered last. Leave empty for defaults."
         required: false
         default: ""
         type: string
       disable_defconfig_check:
-        description: "Private-build escape hatch for check_defconfig"
-        required: false
+        description: "Disable defconfig normalization check for private/custom builds."
+        required: true
         default: "off"
-        type: string
+        type: choice
+        options:
+          - off
+          - on
       disable_kmi_check:
-        description: "Private-build escape hatch for KMI strictness"
-        required: false
+        description: "Disable strict KMI checks for private/custom builds."
+        required: true
         default: "off"
-        type: string
+        type: choice
+        options:
+          - off
+          - on
       build_env:
-        description: "Optional build env KEY=VALUE lines passed to build-kernel.sh. One per line. No export or shell syntax."
-        required: false
-        default: ""
-        type: string
-      extra_args:
-        description: "Optional extra backend args. Simple whitespace splitting only."
+        description: "Optional build env KEY=VALUE lines. One per line. Advanced users only."
         required: false
         default: ""
         type: string
@@ -56,30 +53,30 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout builder repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.repository }}
-          ref: ${{ inputs.ref }}
-          path: builder
+          fetch-depth: 1
 
       - name: Write private.fragment
         if: ${{ inputs.private_fragment != '' }}
         shell: bash
         run: |
           set -euo pipefail
-          cd builder
           cat > private.fragment <<'EOF_PRIVATE_FRAGMENT'
           ${{ inputs.private_fragment }}
           EOF_PRIVATE_FRAGMENT
+          echo "Wrote workflow private.fragment"
 
       - name: Build kernel
         shell: bash
         run: |
           set -euo pipefail
 
-          # This workflow is only a thin template wrapper.
+          # This workflow is the beginner-friendly template.
           # Real build logic lives in scripts/build-kernel.sh.
+          # Advanced users can edit this workflow or run scripts/build-kernel.sh manually.
+          # The two disable checks are explicit private-build escape hatches and default to off.
           build_env_args=()
 
           while IFS= read -r line; do
@@ -114,25 +111,14 @@ jobs:
           ${{ inputs.build_env }}
           EOF_BUILD_ENV
 
-          extra_args=()
-          if [ -n "${{ inputs.extra_args }}" ]; then
-            # Simple whitespace splitting is acceptable for this template.
-            # For complex quoting, users should edit the workflow directly.
-            read -r -a extra_args <<< "${{ inputs.extra_args }}"
-          fi
-
-          cd builder
-
           ./scripts/build-kernel.sh "${{ inputs.profile }}" \
-            --mode "${{ inputs.mode }}" \
             --disable-defconfig-check "${{ inputs.disable_defconfig_check }}" \
             --disable-kmi-check "${{ inputs.disable_kmi_check }}" \
-            "${build_env_args[@]}" \
-            -- "${extra_args[@]}"
+            "${build_env_args[@]}"
 
       - name: Upload kernel artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kernel-${{ inputs.profile }}-${{ github.run_number }}
-          path: builder/dist/${{ inputs.profile }}/
+          path: dist/${{ inputs.profile }}/
           if-no-files-found: error
