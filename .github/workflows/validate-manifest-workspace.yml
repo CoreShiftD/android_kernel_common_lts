@@ -32,6 +32,9 @@ jobs:
           bash -n scripts/setup-manifest-workspace.sh
           bash -n scripts/run-manifest-build.sh
           bash -n scripts/build-kernel.sh
+          bash -n scripts/prepare-private-fragment.sh
+          bash -n scripts/disable-defconfig-check.sh
+          bash -n scripts/disable-kmi-check.sh
           bash -n scripts/collect-artifacts.sh
 
       - name: Validate profiles

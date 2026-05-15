@@ -68,12 +68,13 @@ PY
 
 case "$BUILD_MODE" in
   google_build_sh)
-    if [ -z "$BUILD_CONFIG" ]; then
+    selected_build_config="${BUILD_CONFIG_OVERRIDE:-$BUILD_CONFIG}"
+    if [ -z "$selected_build_config" ]; then
       echo "Profile does not define build_config: $PROFILE_JSON" >&2
       exit 1
     fi
-    if [ ! -f "$WORKSPACE_DIR/$BUILD_CONFIG" ]; then
-      echo "BUILD_CONFIG not found in workspace: $WORKSPACE_DIR/$BUILD_CONFIG" >&2
+    if [ ! -f "$WORKSPACE_DIR/$selected_build_config" ]; then
+      echo "BUILD_CONFIG not found in workspace: $WORKSPACE_DIR/$selected_build_config" >&2
       exit 1
     fi
     if [ ! -x "$WORKSPACE_DIR/build/build.sh" ]; then
@@ -82,7 +83,7 @@ case "$BUILD_MODE" in
     fi
     (
       cd "$WORKSPACE_DIR"
-      BUILD_CONFIG="$BUILD_CONFIG" build/build.sh "$@"
+      BUILD_CONFIG="$selected_build_config" build/build.sh "$@"
     )
     ;;
   kleaf)

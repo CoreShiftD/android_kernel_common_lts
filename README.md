@@ -68,6 +68,14 @@ cd android_kernel_common_lts
 ./scripts/build-kernel.sh android12-5.4-lts
 ```
 
+To customize the kernel config privately:
+
+```bash
+cp configs/fragments/private.fragment.example private.fragment
+nano private.fragment
+./scripts/build-kernel.sh android12-5.4-lts
+```
+
 This entrypoint will:
 
 1. Resolve `profiles/<profile>.json`.
@@ -75,12 +83,13 @@ This entrypoint will:
 3. Create or reuse `.work/<profile>`.
 4. Initialize or refresh the ACK manifest workspace unless `--skip-setup` is used.
 5. Select `google_build_sh` automatically when available, with `kleaf` as an explicit mode or auto fallback when `build/build.sh` is unavailable and the profile defines `bazel_target`.
-6. Collect common build artifacts into `dist/<profile>/`.
+6. Generate `common/private.fragment` from the fixed CoreShift layering model.
+7. Collect common build artifacts into `dist/<profile>/`.
 
 Usage:
 
 ```bash
-scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [-- EXTRA_BUILD_ARGS...]
+scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [-- EXTRA_BUILD_ARGS...]
 ```
 
 Required host tools:
@@ -93,6 +102,37 @@ Required host tools:
 Scope:
 
 This produces ACK/GKI kernel build artifacts. Device-specific `boot`, `vendor_boot`, or AnyKernel-style packaging is separate and requires device-specific configuration.
+
+### Private fragment model
+
+CoreShift uses a fixed fragment layer order:
+
+1. base ACK defconfig
+2. CoreShift default fragment
+3. user `private.fragment` last
+
+`private.fragment` lives at the repo root and is intentionally local and user-editable. Use Kconfig fragment syntax, not a full `.config`. User `private.fragment` content is always layered last, so duplicate `CONFIG_` values there win over earlier layers.
+
+CoreShift ships:
+
+- `configs/fragments/coreshift.fragment`
+- `configs/fragments/private.fragment.example`
+
+`scripts/prepare-private-fragment.sh` combines them into:
+
+- `common/private.fragment`
+- `common/private.required`
+
+If you do not create a repo-root `private.fragment`, builds continue normally using only the CoreShift default fragment.
+
+### Private build escape hatches
+
+For local experimentation, `build-kernel.sh` exposes:
+
+- `--disable-defconfig-check on|off`
+- `--disable-kmi-check on|off`
+
+These are explicit private-build escape hatches. They do not guarantee device safety, ABI stability, or KMI compatibility.
 
 ## Related workflows
 

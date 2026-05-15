@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [-- EXTRA_BUILD_ARGS...]
+Usage: scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [-- EXTRA_BUILD_ARGS...]
 
 Builds an ACK/GKI kernel for the named profile using the manifest workspace helpers.
 
@@ -37,6 +37,8 @@ ARTIFACT_DIR="$REPO_ROOT/dist/$PROFILE_NAME"
 MODE="auto"
 SKIP_SETUP=0
 CLEAN=0
+DISABLE_DEFCONFIG_CHECK="off"
+DISABLE_KMI_CHECK="off"
 EXTRA_ARGS=()
 
 while [ "$#" -gt 0 ]; do
@@ -65,6 +67,22 @@ while [ "$#" -gt 0 ]; do
       CLEAN=1
       shift
       ;;
+    --disable-defconfig-check)
+      if [ "$#" -lt 2 ]; then
+        echo "Missing value for --disable-defconfig-check" >&2
+        exit 1
+      fi
+      DISABLE_DEFCONFIG_CHECK="$2"
+      shift 2
+      ;;
+    --disable-kmi-check)
+      if [ "$#" -lt 2 ]; then
+        echo "Missing value for --disable-kmi-check" >&2
+        exit 1
+      fi
+      DISABLE_KMI_CHECK="$2"
+      shift 2
+      ;;
     --)
       shift
       EXTRA_ARGS=("$@")
@@ -84,6 +102,24 @@ case "$MODE" in
   *)
     echo "Unsupported build mode: $MODE" >&2
     usage >&2
+    exit 1
+    ;;
+esac
+
+case "$DISABLE_DEFCONFIG_CHECK" in
+  on|off)
+    ;;
+  *)
+    echo "Unsupported value for --disable-defconfig-check: $DISABLE_DEFCONFIG_CHECK" >&2
+    exit 1
+    ;;
+esac
+
+case "$DISABLE_KMI_CHECK" in
+  on|off)
+    ;;
+  *)
+    echo "Unsupported value for --disable-kmi-check: $DISABLE_KMI_CHECK" >&2
     exit 1
     ;;
 esac
@@ -126,6 +162,8 @@ if [ ! -d "$WORKSPACE_DIR/.repo" ]; then
   echo "Workspace is not a repo manifest checkout: $WORKSPACE_DIR" >&2
   exit 1
 fi
+
+"$REPO_ROOT/scripts/prepare-private-fragment.sh" "$PROFILE_JSON" "$WORKSPACE_DIR"
 
 eval "$(
   python3 - "$PROFILE_JSON" <<'PY'
@@ -183,8 +221,22 @@ resolve_mode() {
 
 SELECTED_MODE="$(resolve_mode)"
 
+if [ "$DISABLE_DEFCONFIG_CHECK" = "on" ]; then
+  "$REPO_ROOT/scripts/disable-defconfig-check.sh" "$WORKSPACE_DIR"
+fi
+
+if [ "$DISABLE_KMI_CHECK" = "on" ]; then
+  "$REPO_ROOT/scripts/disable-kmi-check.sh" "$WORKSPACE_DIR"
+fi
+
+BUILD_CONFIG_OVERRIDE_VALUE=""
+if [ "$SELECTED_MODE" = "google_build_sh" ] && [ -f "$WORKSPACE_DIR/common/build.config.coreshift.gki.aarch64" ]; then
+  BUILD_CONFIG_OVERRIDE_VALUE="common/build.config.coreshift.gki.aarch64"
+fi
+
 OUT_DIR="$WORKSPACE_DIR/out" \
 DIST_DIR="$WORKSPACE_DIR/dist" \
+BUILD_CONFIG_OVERRIDE="$BUILD_CONFIG_OVERRIDE_VALUE" \
   "$REPO_ROOT/scripts/run-manifest-build.sh" \
   "$PROFILE_JSON" \
   "$WORKSPACE_DIR" \
@@ -199,3 +251,6 @@ echo "  profile: $PROFILE_NAME"
 echo "  workspace: $WORKSPACE_DIR"
 echo "  build mode: $SELECTED_MODE"
 echo "  artifacts: $ARTIFACT_DIR"
+if [ -n "$BUILD_CONFIG_OVERRIDE_VALUE" ]; then
+  echo "  build config override: $BUILD_CONFIG_OVERRIDE_VALUE"
+fi
