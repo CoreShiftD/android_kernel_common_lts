@@ -277,6 +277,8 @@ for passthrough_key in \
   CCACHE_NOHASHDIR \
   CCACHE_COMPILERCHECK \
   CCACHE_SLOPPINESS \
+  CCACHE_WRAPPER_DIR \
+  CCACHE_PATH \
   USE_CCACHE
 do
   append_passthrough_build_env_if_unset "$passthrough_key"
@@ -380,6 +382,17 @@ if [ "$is_54_profile" -eq 1 ]; then
     add_default_build_env "UAPI_SYSROOT_CFLAGS" "--target=aarch64-linux-gnu -isystem /usr/aarch64-linux-gnu/include"
     echo "Auto-added UAPI_SYSROOT_CFLAGS for 5.4 header tests: /usr/aarch64-linux-gnu/include"
   fi
+fi
+
+if [ "$SELECTED_MODE" = "google_build_sh" ] && command -v ccache >/dev/null 2>&1; then
+  # shellcheck source=/dev/null
+  . "$REPO_ROOT/scripts/setup-ccache-wrappers.sh" "$WORKSPACE_DIR"
+  append_passthrough_build_env_if_unset "CCACHE_WRAPPER_DIR"
+  append_passthrough_build_env_if_unset "CCACHE_PATH"
+  echo "google_build_sh compiler diagnostics:"
+  command -v clang
+  clang --version | head -n 1 || true
+  ccache -s || true
 fi
 
 if [ "$DISABLE_DEFCONFIG_CHECK" = "on" ]; then

@@ -214,7 +214,17 @@ Examples:
 
 The first run will mostly miss. A second run on the same profile and source should hit more often.
 
-If `ccache -s` shows `Cacheable calls` as zero, the compiler is not going through `ccache` yet. In that case, the next step is adding explicit compiler wrapper support, not changing cache keys.
+For `google_build_sh`, CoreShift now uses wrapper symlinks so `clang`, `clang++`, `gcc`, `g++`, `cc`, and `c++` resolve through `ccache` before the repo-synced toolchains in `PATH`.
+
+If `ccache -s` shows only cache size information and no cacheable calls, the compiler is still not going through `ccache`. In that case, inspect:
+
+```bash
+command -v clang
+readlink -f "$(command -v clang)"
+ccache -s
+```
+
+If those still show zero cacheable calls across repeated runs, Google `build.sh` may be forcing the real Clang path ahead of the wrapper path.
 
 Scope:
 

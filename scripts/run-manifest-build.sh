@@ -10,6 +10,16 @@ kleaf: runs tools/bazel run with the Bazel target from the profile
 EOF
 }
 
+ccache_warn_if_no_cacheable_calls() {
+  local stats_output="$1"
+  if ! command -v ccache >/dev/null 2>&1; then
+    return 0
+  fi
+  if printf '%s\n' "$stats_output" | grep -Eq 'Cacheable calls:[[:space:]]+0([[:space:]]|$| /)'; then
+    echo "ccache appears configured but compiler calls may not be routed through ccache. Google build.sh may be prepending the real Clang path after wrapper setup." >&2
+  fi
+}
+
 if [ "$#" -lt 3 ]; then
   usage >&2
   exit 1
@@ -84,6 +94,16 @@ case "$BUILD_MODE" in
     fi
     (
       cd "$WORKSPACE_DIR"
+      echo "PATH=$PATH"
+      echo "CCACHE_DIR=${CCACHE_DIR:-}"
+      echo "CCACHE_WRAPPER_DIR=${CCACHE_WRAPPER_DIR:-}"
+      echo "CCACHE_PATH=${CCACHE_PATH:-}"
+      command -v clang
+      readlink -f "$(command -v clang)" || true
+      clang --version | head -n 1 || true
+      pre_build_ccache_stats="$(ccache -s 2>/dev/null || true)"
+      printf '%s\n' "$pre_build_ccache_stats"
+      ccache_warn_if_no_cacheable_calls "$pre_build_ccache_stats"
       echo "selected BUILD_CONFIG=$selected_build_config"
       echo "LTO=${LTO:-}"
       echo "CORESHIFT_JOBS=${CORESHIFT_JOBS:-}"
@@ -98,6 +118,9 @@ case "$BUILD_MODE" in
       else
         BUILD_CONFIG="$selected_build_config" build/build.sh "$@"
       fi
+      post_build_ccache_stats="$(ccache -s 2>/dev/null || true)"
+      printf '%s\n' "$post_build_ccache_stats"
+      ccache_warn_if_no_cacheable_calls "$post_build_ccache_stats"
     )
     ;;
   kleaf)

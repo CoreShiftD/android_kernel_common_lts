@@ -32,6 +32,7 @@ jobs:
           bash -n scripts/install-build-tools.sh
           bash -n scripts/install-repo-tool.sh
           bash -n scripts/setup-ccache.sh
+          bash -n scripts/setup-ccache-wrappers.sh
           bash -n scripts/add-swap.sh
           bash -n scripts/setup-manifest-workspace.sh
           bash -n scripts/run-manifest-build.sh
