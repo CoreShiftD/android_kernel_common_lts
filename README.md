@@ -185,9 +185,11 @@ Rules:
 
 Local repo-root `private.fragment` is ignored by git and is not automatically available to GitHub Actions. For Actions builds, paste the fragment into the `private_fragment` workflow input or customize your fork.
 
-`disable_defconfig_check` is a boolean input that defaults to `false`, and `disable_kmi_check` is a boolean input that defaults to `false`. In the workflow, `true` maps to the script value `on`, and `false` maps to `off`.
+GitHub Actions workflows disable the defconfig normalization check by default. This avoids common private-fragment or non-normalized defconfig failures in workflow builds.
 
-Enable them only for private/custom builds when ACK checks block expected changes. They do not guarantee device safety, ABI stability, or KMI compatibility.
+`disable_defconfig_check` is a boolean input that defaults to `true`, and `disable_kmi_check` is a boolean input that defaults to `false`. In the workflow, `true` maps to the script value `on`, and `false` maps to `off`.
+
+KMI check bypass still defaults to `false`/`off` and must be explicitly enabled in `Build.yml`. These options do not guarantee device safety, ABI stability, or KMI compatibility.
 
 Advanced users can still run locally with the full script surface:
 
@@ -200,11 +202,17 @@ Advanced users can still run locally with the full script surface:
   -- EXTRA_BACKEND_ARGS
 ```
 
+Local CLI behavior remains unchanged unless you explicitly pass:
+
+```bash
+./scripts/build-kernel.sh android13-5.15-lts --disable-defconfig-check on
+```
+
 ### Build-All workflow
 
 The repo also includes `.github/workflows/Build-All.yml`, a no-option matrix workflow that builds every profile in `profiles/*.json` and uploads one artifact per profile.
 
-It is intended for batch validation, not customization, and can be expensive because it runs many kernel builds. Per-profile customization belongs in `Build.yml` or direct local use of `scripts/build-kernel.sh`.
+It is intended for batch validation, not customization, and can be expensive because it runs many kernel builds. It also disables the defconfig normalization check by default for every matrix build. Per-profile customization belongs in `Build.yml` or direct local use of `scripts/build-kernel.sh`.
 
 ## Related workflows
 

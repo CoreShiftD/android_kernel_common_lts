@@ -26,7 +26,7 @@ on:
       disable_defconfig_check:
         description: "Disable defconfig normalization check for private/custom builds."
         required: true
-        default: false
+        default: true
         type: boolean
       disable_kmi_check:
         description: "Disable strict KMI checks for private/custom builds."
