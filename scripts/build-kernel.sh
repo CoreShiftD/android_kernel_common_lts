@@ -41,7 +41,7 @@ DISABLE_DEFCONFIG_CHECK="off"
 DISABLE_KMI_CHECK="off"
 BUILD_ENV=()
 BUILD_ENV_KEYS=()
-USER_SET_UAPI_CFLAGS=0
+USER_SET_UAPI_SYSROOT_CFLAGS=0
 EXTRA_ARGS=()
 
 while [ "$#" -gt 0 ]; do
@@ -102,8 +102,8 @@ while [ "$#" -gt 0 ]; do
       fi
       BUILD_ENV+=("$2")
       BUILD_ENV_KEYS+=("$build_env_key")
-      if [ "$build_env_key" = "UAPI_CFLAGS" ]; then
-        USER_SET_UAPI_CFLAGS=1
+      if [ "$build_env_key" = "UAPI_SYSROOT_CFLAGS" ]; then
+        USER_SET_UAPI_SYSROOT_CFLAGS=1
       fi
       shift 2
       ;;
@@ -169,15 +169,6 @@ case "$PROFILE_NAME" in
     ;;
 esac
 
-if [ "$is_54_profile" -eq 1 ] && [ "$USER_SET_UAPI_CFLAGS" -eq 0 ]; then
-  if [ ! -f /usr/aarch64-linux-gnu/include/sys/time.h ]; then
-    echo "Warning: /usr/aarch64-linux-gnu/include/sys/time.h is missing; 5.4 UAPI header tests may fail unless install-build-tools.sh installed the Arm64 cross libc headers" >&2
-  fi
-  BUILD_ENV+=("UAPI_CFLAGS=-std=c90 -Wall -Werror=implicit-function-declaration --target=aarch64-linux-gnu -isystem /usr/aarch64-linux-gnu/include")
-  BUILD_ENV_KEYS+=("UAPI_CFLAGS")
-  echo "Auto-added UAPI_CFLAGS for 5.4 header tests: /usr/aarch64-linux-gnu/include"
-fi
-
 for tool in git repo; do
   command -v "$tool" >/dev/null 2>&1 || {
     echo "Missing required tool: $tool" >&2
@@ -206,6 +197,18 @@ if [ ! -d "$WORKSPACE_DIR/.repo" ]; then
 fi
 
 "$REPO_ROOT/scripts/prepare-private-fragment.sh" "$PROFILE_JSON" "$WORKSPACE_DIR"
+
+if [ "$is_54_profile" -eq 1 ]; then
+  "$REPO_ROOT/scripts/patch-54-uapi-sysroot.sh" "$WORKSPACE_DIR"
+  if [ "$USER_SET_UAPI_SYSROOT_CFLAGS" -eq 0 ]; then
+    if [ ! -f /usr/aarch64-linux-gnu/include/sys/time.h ]; then
+      echo "Warning: /usr/aarch64-linux-gnu/include/sys/time.h is missing; install-build-tools.sh should install libc6-dev-arm64-cross, and 5.4 header tests may still fail without it" >&2
+    fi
+    BUILD_ENV+=("UAPI_SYSROOT_CFLAGS=--target=aarch64-linux-gnu -isystem /usr/aarch64-linux-gnu/include")
+    BUILD_ENV_KEYS+=("UAPI_SYSROOT_CFLAGS")
+    echo "Auto-added UAPI_SYSROOT_CFLAGS for 5.4 header tests: /usr/aarch64-linux-gnu/include"
+  fi
+fi
 
 mapfile -t profile_build_fields < <(
   python3 - "$PROFILE_JSON" <<'PY'

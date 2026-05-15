@@ -116,19 +116,27 @@ For local builds, you can install the required host tooling with:
 
 This installs host tooling, the `repo` launcher, Arm64 cross libc headers, and common kernel build dependencies from the current Ubuntu package sources. It does not override the ACK/AOSP Clang selected by the synced Google kernel manifest.
 
-For `android*-5.4-lts` profiles, `scripts/build-kernel.sh` automatically adds a default `UAPI_CFLAGS` pointing at `/usr/aarch64-linux-gnu/include` when you do not provide `UAPI_CFLAGS` yourself. This helps exported UAPI header tests find libc headers such as `sys/time.h`. GitHub Actions workflows get the needed cross libc packages through `./scripts/install-build-tools.sh`.
+For `android*-5.4-lts` profiles, `scripts/build-kernel.sh` patches `common/usr/include/Makefile` in the prepared workspace so exported UAPI header tests append `UAPI_SYSROOT_CFLAGS`. By default, that points at `/usr/aarch64-linux-gnu/include`, which helps old 5.4 header tests find libc headers such as `sys/time.h`. GitHub Actions workflows get the needed cross libc packages through `./scripts/install-build-tools.sh`.
 
 You can still override that explicitly:
 
 ```bash
 ./scripts/build-kernel.sh android12-5.4-lts \
-  --build-env 'UAPI_CFLAGS=-std=c90 -Wall --target=aarch64-linux-gnu -isystem /some/other/sysroot/include'
+  --build-env 'UAPI_SYSROOT_CFLAGS=--target=aarch64-linux-gnu -isystem /custom/sysroot/include'
 ```
+
+This does not use environment `UAPI_CFLAGS` directly, because the kernel `common/usr/include/Makefile` defines `UAPI_CFLAGS` internally and an env override is not reliable.
 
 This is separate from skipping header install/tests. If you intentionally want the fast/private path, you can still pass:
 
 ```bash
 ./scripts/build-kernel.sh android12-5.4-lts --build-env SKIP_HEADERS_INSTALL=1
+```
+
+For large local builds, especially full-LTO runs, you can also add swap before compiling:
+
+```bash
+./scripts/add-swap.sh 16
 ```
 
 Scope:
@@ -181,6 +189,8 @@ It checks out the current repository, optionally writes a repo-root `private.fra
 The GitHub Actions workflows install required host/build tools automatically before invoking `scripts/build-kernel.sh`.
 
 They install the latest versions available from the configured Ubuntu runner apt repositories after `apt-get update`. This prepares host tooling, the Android `repo` launcher, Arm64 cross libc headers, and common kernel build dependencies, but it does not override the ACK/AOSP Clang selected by the Google manifest.
+
+They also add a 16GB swap file before kernel compilation.
 
 The default workflow intentionally does not expose `repository`, `ref`, `mode`, or `extra_args`. Advanced users can edit `Build.yml` directly or run `scripts/build-kernel.sh` manually.
 

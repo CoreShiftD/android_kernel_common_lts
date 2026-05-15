@@ -56,6 +56,10 @@ jobs:
         shell: bash
         run: ./scripts/install-build-tools.sh
 
+      - name: Add swap
+        shell: bash
+        run: ./scripts/add-swap.sh 16
+
       - name: Write private.fragment
         if: ${{ inputs.private_fragment != '' }}
         shell: bash

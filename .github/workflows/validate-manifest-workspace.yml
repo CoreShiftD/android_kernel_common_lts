@@ -31,9 +31,11 @@ jobs:
           set -euo pipefail
           bash -n scripts/install-build-tools.sh
           bash -n scripts/install-repo-tool.sh
+          bash -n scripts/add-swap.sh
           bash -n scripts/setup-manifest-workspace.sh
           bash -n scripts/run-manifest-build.sh
           bash -n scripts/build-kernel.sh
+          bash -n scripts/patch-54-uapi-sysroot.sh
           bash -n scripts/prepare-private-fragment.sh
           bash -n scripts/disable-defconfig-check.sh
           bash -n scripts/disable-kmi-check.sh
