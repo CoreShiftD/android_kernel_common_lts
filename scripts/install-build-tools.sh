@@ -84,6 +84,14 @@ if [ ! -f /usr/aarch64-linux-gnu/include/sys/time.h ]; then
   echo "Warning: /usr/aarch64-linux-gnu/include/sys/time.h not found after installation" >&2
 fi
 
+if [ ! -f /usr/aarch64-linux-gnu/include/sys/ioctl.h ]; then
+  echo "Warning: /usr/aarch64-linux-gnu/include/sys/ioctl.h not found after installation" >&2
+fi
+
+if [ ! -f /usr/aarch64-linux-gnu/include/sys/types.h ]; then
+  echo "Warning: /usr/aarch64-linux-gnu/include/sys/types.h not found after installation" >&2
+fi
+
 echo "Installed host tool versions:"
 git --version
 python3 --version
@@ -92,4 +100,3 @@ repo --version || true
 aarch64-linux-gnu-gcc --version | head -n 1 || true
 pahole --version || true
 zstd --version || true
-

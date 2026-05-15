@@ -41,6 +41,7 @@ DISABLE_DEFCONFIG_CHECK="off"
 DISABLE_KMI_CHECK="off"
 BUILD_ENV=()
 BUILD_ENV_KEYS=()
+USER_SET_UAPI_CFLAGS=0
 EXTRA_ARGS=()
 
 while [ "$#" -gt 0 ]; do
@@ -101,6 +102,9 @@ while [ "$#" -gt 0 ]; do
       fi
       BUILD_ENV+=("$2")
       BUILD_ENV_KEYS+=("$build_env_key")
+      if [ "$build_env_key" = "UAPI_CFLAGS" ]; then
+        USER_SET_UAPI_CFLAGS=1
+      fi
       shift 2
       ;;
     --)
@@ -155,6 +159,24 @@ command -v python3 >/dev/null 2>&1 || {
 }
 
 python3 "$REPO_ROOT/scripts/validate-profiles.py"
+
+case "$PROFILE_NAME" in
+  android*-5.4-lts)
+    is_54_profile=1
+    ;;
+  *)
+    is_54_profile=0
+    ;;
+esac
+
+if [ "$is_54_profile" -eq 1 ] && [ "$USER_SET_UAPI_CFLAGS" -eq 0 ]; then
+  if [ ! -f /usr/aarch64-linux-gnu/include/sys/time.h ]; then
+    echo "Warning: /usr/aarch64-linux-gnu/include/sys/time.h is missing; 5.4 UAPI header tests may fail unless install-build-tools.sh installed the Arm64 cross libc headers" >&2
+  fi
+  BUILD_ENV+=("UAPI_CFLAGS=-std=c90 -Wall -Werror=implicit-function-declaration --target=aarch64-linux-gnu -isystem /usr/aarch64-linux-gnu/include")
+  BUILD_ENV_KEYS+=("UAPI_CFLAGS")
+  echo "Auto-added UAPI_CFLAGS for 5.4 header tests: /usr/aarch64-linux-gnu/include"
+fi
 
 for tool in git repo; do
   command -v "$tool" >/dev/null 2>&1 || {

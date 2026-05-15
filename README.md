@@ -116,6 +116,21 @@ For local builds, you can install the required host tooling with:
 
 This installs host tooling, the `repo` launcher, Arm64 cross libc headers, and common kernel build dependencies from the current Ubuntu package sources. It does not override the ACK/AOSP Clang selected by the synced Google kernel manifest.
 
+For `android*-5.4-lts` profiles, `scripts/build-kernel.sh` automatically adds a default `UAPI_CFLAGS` pointing at `/usr/aarch64-linux-gnu/include` when you do not provide `UAPI_CFLAGS` yourself. This helps exported UAPI header tests find libc headers such as `sys/time.h`. GitHub Actions workflows get the needed cross libc packages through `./scripts/install-build-tools.sh`.
+
+You can still override that explicitly:
+
+```bash
+./scripts/build-kernel.sh android12-5.4-lts \
+  --build-env 'UAPI_CFLAGS=-std=c90 -Wall --target=aarch64-linux-gnu -isystem /some/other/sysroot/include'
+```
+
+This is separate from skipping header install/tests. If you intentionally want the fast/private path, you can still pass:
+
+```bash
+./scripts/build-kernel.sh android12-5.4-lts --build-env SKIP_HEADERS_INSTALL=1
+```
+
 Scope:
 
 This produces ACK/GKI kernel build artifacts. Device-specific `boot`, `vendor_boot`, or AnyKernel-style packaging is separate and requires device-specific configuration.
