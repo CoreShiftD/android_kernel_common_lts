@@ -58,6 +58,42 @@ scripts/run-manifest-build.sh profiles/<branch>.json <workspace> google_build_sh
 
 Use `kleaf` instead of `google_build_sh` when the profile defines a non-null `bazel_target`.
 
+## One-command build
+
+Clone the repo and run a profile build directly:
+
+```bash
+git clone https://github.com/CoreShiftD/android_kernel_common_lts
+cd android_kernel_common_lts
+./scripts/build-kernel.sh android12-5.4-lts
+```
+
+This entrypoint will:
+
+1. Resolve `profiles/<profile>.json`.
+2. Validate the profile set.
+3. Create or reuse `.work/<profile>`.
+4. Initialize or refresh the ACK manifest workspace unless `--skip-setup` is used.
+5. Select `google_build_sh` automatically when available, with `kleaf` as an explicit mode or auto fallback when `build/build.sh` is unavailable and the profile defines `bazel_target`.
+6. Collect common build artifacts into `dist/<profile>/`.
+
+Usage:
+
+```bash
+scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [-- EXTRA_BUILD_ARGS...]
+```
+
+Required host tools:
+
+- `git`
+- `python3`
+- `repo`
+- Standard Android kernel build dependencies supplied by the ACK manifest/tooling
+
+Scope:
+
+This produces ACK/GKI kernel build artifacts. Device-specific `boot`, `vendor_boot`, or AnyKernel-style packaging is separate and requires device-specific configuration.
+
 ## Related workflows
 
 `sync-kernel-source.yml` stays separate from manifest workspace setup. It mirrors `https://android.googlesource.com/kernel/common` source branches directly and does not use repo manifests.

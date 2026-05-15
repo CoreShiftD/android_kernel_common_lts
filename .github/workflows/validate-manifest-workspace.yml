@@ -31,6 +31,8 @@ jobs:
           set -euo pipefail
           bash -n scripts/setup-manifest-workspace.sh
           bash -n scripts/run-manifest-build.sh
+          bash -n scripts/build-kernel.sh
+          bash -n scripts/collect-artifacts.sh
 
       - name: Validate profiles
         shell: bash
