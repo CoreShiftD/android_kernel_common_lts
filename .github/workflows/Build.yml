@@ -52,13 +52,30 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ runner.os }}-${{ inputs.profile }}-${{ github.ref_name }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ inputs.profile }}-
+            ccache-${{ runner.os }}-
+
       - name: Install build tools
         shell: bash
         run: ./scripts/install-build-tools.sh
 
+      - name: Setup ccache
+        shell: bash
+        run: ./scripts/setup-ccache.sh
+
       - name: Add swap
         shell: bash
         run: ./scripts/add-swap.sh 16
+
+      - name: Ccache stats before build
+        shell: bash
+        run: ccache -s || true
 
       - name: Write private.fragment
         if: ${{ inputs.private_fragment != '' }}
@@ -127,6 +144,11 @@ jobs:
             --disable-defconfig-check "$defconfig_check_arg" \
             --disable-kmi-check "$kmi_check_arg" \
             "${build_env_args[@]}"
+
+      - name: Ccache stats after build
+        if: always()
+        shell: bash
+        run: ccache -s || true
 
       - name: Upload kernel artifacts
         uses: actions/upload-artifact@v4

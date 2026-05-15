@@ -27,6 +27,7 @@ APT_PACKAGES=(
   gcc-aarch64-linux-gnu
   libc6-dev-arm64-cross
   linux-libc-dev-arm64-cross
+  ccache
 )
 
 if ! command -v apt-get >/dev/null 2>&1; then
@@ -37,6 +38,9 @@ fi
 mkdir -p "$LOCAL_BIN"
 
 sudo apt-get update
+if [ "${CORESHIFT_APT_UPGRADE:-0}" = "1" ]; then
+  sudo apt-get upgrade -y
+fi
 sudo apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"
 
 if command -v repo >/dev/null 2>&1; then
@@ -67,6 +71,7 @@ required_tools=(
   flex
   rsync
   zstd
+  ccache
 )
 
 for tool in "${required_tools[@]}"; do
@@ -100,3 +105,4 @@ repo --version || true
 aarch64-linux-gnu-gcc --version | head -n 1 || true
 pahole --version || true
 zstd --version || true
+ccache --version | head -n 1 || true

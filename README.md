@@ -114,7 +114,15 @@ For local builds, you can install the required host tooling with:
 ./scripts/install-build-tools.sh
 ```
 
-This installs host tooling, the `repo` launcher, Arm64 cross libc headers, and common kernel build dependencies from the current Ubuntu package sources. It does not override the ACK/AOSP Clang selected by the synced Google kernel manifest.
+This installs host tooling, the `repo` launcher, Arm64 cross libc headers, `ccache`, and common kernel build dependencies from the current Ubuntu package sources. It does not override the ACK/AOSP Clang selected by the synced Google kernel manifest.
+
+By default, it only runs `apt-get update` plus `apt-get install`, which is faster and more reproducible for CI. If you explicitly want a broader host package refresh, you can opt in to:
+
+```bash
+CORESHIFT_APT_UPGRADE=1 ./scripts/install-build-tools.sh
+```
+
+That is slower and less reproducible than the default update-and-install path.
 
 For `android*-5.4-lts` profiles, `scripts/build-kernel.sh` patches `common/usr/include/Makefile` in the prepared workspace so exported UAPI header tests append `UAPI_SYSROOT_CFLAGS`. By default, that points at `/usr/aarch64-linux-gnu/include`, which helps old 5.4 header tests find libc headers such as `sys/time.h`. GitHub Actions workflows get the needed cross libc packages through `./scripts/install-build-tools.sh`.
 
@@ -137,6 +145,19 @@ For large local builds, especially full-LTO runs, you can also add swap before c
 
 ```bash
 ./scripts/add-swap.sh 16
+```
+
+You can also prepare `ccache` locally before building:
+
+```bash
+./scripts/setup-ccache.sh
+./scripts/build-kernel.sh android12-5.4-lts
+```
+
+`ccache` effectiveness depends on whether the selected backend invokes compilers through ccache-compatible paths. Check cache results after a build with:
+
+```bash
+ccache -s
 ```
 
 Scope:
@@ -188,7 +209,9 @@ It checks out the current repository, optionally writes a repo-root `private.fra
 
 The GitHub Actions workflows install required host/build tools automatically before invoking `scripts/build-kernel.sh`.
 
-They install the latest versions available from the configured Ubuntu runner apt repositories after `apt-get update`. This prepares host tooling, the Android `repo` launcher, Arm64 cross libc headers, and common kernel build dependencies, but it does not override the ACK/AOSP Clang selected by the Google manifest.
+They install the latest versions available from the configured Ubuntu runner apt repositories after `apt-get update`. This prepares host tooling, the Android `repo` launcher, Arm64 cross libc headers, `ccache`, and common kernel build dependencies, but it does not override the ACK/AOSP Clang selected by the Google manifest.
+
+The workflows also restore and save `~/.cache/ccache` with `actions/cache`, run `./scripts/setup-ccache.sh`, and print `ccache -s` before and after each build.
 
 They also add a 16GB swap file before kernel compilation.
 
