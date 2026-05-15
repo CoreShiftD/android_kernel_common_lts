@@ -29,6 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          bash -n scripts/install-repo-tool.sh
           bash -n scripts/setup-manifest-workspace.sh
           bash -n scripts/run-manifest-build.sh
           bash -n scripts/build-kernel.sh

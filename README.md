@@ -108,6 +108,12 @@ Required host tools:
 - `repo`
 - Standard Android kernel build dependencies supplied by the ACK manifest/tooling
 
+If `repo` is not already installed locally, you can install it with:
+
+```bash
+./scripts/install-repo-tool.sh
+```
+
 Scope:
 
 This produces ACK/GKI kernel build artifacts. Device-specific `boot`, `vendor_boot`, or AnyKernel-style packaging is separate and requires device-specific configuration.
@@ -154,6 +160,8 @@ The repo includes a beginner-friendly template workflow at `.github/workflows/Bu
 - `disable_kmi_check`
 
 It checks out the current repository, optionally writes a repo-root `private.fragment`, calls `./scripts/build-kernel.sh`, and uploads only `dist/<profile>/`.
+
+The GitHub Actions workflows install the Android `repo` tool automatically before invoking `scripts/build-kernel.sh`.
 
 The default workflow intentionally does not expose `repository`, `ref`, `mode`, or `extra_args`. Advanced users can edit `Build.yml` directly or run `scripts/build-kernel.sh` manually.
 
