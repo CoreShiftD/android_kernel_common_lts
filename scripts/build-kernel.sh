@@ -341,7 +341,6 @@ resolve_mode() {
 SELECTED_MODE="$(resolve_mode)"
 EFFECTIVE_LTO=""
 EFFECTIVE_JOBS=""
-EFFECTIVE_SKIP_HEADERS_INSTALL=""
 
 if [ "$SELECTED_MODE" = "google_build_sh" ]; then
   add_default_build_env "SKIP_MRPROPER" "1"
@@ -363,21 +362,23 @@ if [ "$SELECTED_MODE" = "google_build_sh" ]; then
     add_default_build_env "LLD_PARALLEL_LINK_JOBS" "1"
   fi
   EFFECTIVE_JOBS="$(get_build_env_value "CORESHIFT_JOBS")"
-  EFFECTIVE_SKIP_HEADERS_INSTALL="$(get_build_env_value "SKIP_HEADERS_INSTALL")"
 fi
 
-if [ "$is_54_profile" -eq 1 ] && [ "$SELECTED_MODE" = "google_build_sh" ]; then
-  if [ "$EFFECTIVE_SKIP_HEADERS_INSTALL" != "1" ]; then
-    "$REPO_ROOT/scripts/patch-54-uapi-sysroot.sh" "$WORKSPACE_DIR"
-    if [ "$USER_SET_UAPI_SYSROOT_CFLAGS" -eq 0 ]; then
-      if [ ! -f /usr/aarch64-linux-gnu/include/sys/time.h ]; then
-        echo "Warning: /usr/aarch64-linux-gnu/include/sys/time.h is missing; install-build-tools.sh should install libc6-dev-arm64-cross, and 5.4 header tests may still fail without it" >&2
-      fi
-      add_default_build_env "UAPI_SYSROOT_CFLAGS" "--target=aarch64-linux-gnu -isystem /usr/aarch64-linux-gnu/include"
-      echo "Auto-added UAPI_SYSROOT_CFLAGS for 5.4 header tests: /usr/aarch64-linux-gnu/include"
+if [ "$is_54_profile" -eq 1 ]; then
+  "$REPO_ROOT/scripts/patch-54-uapi-sysroot.sh" "$WORKSPACE_DIR"
+  echo "Applied 5.4 UAPI sysroot patch"
+  if [ "$USER_SET_UAPI_SYSROOT_CFLAGS" -eq 0 ]; then
+    if [ ! -f /usr/aarch64-linux-gnu/include/sys/time.h ]; then
+      echo "Warning: /usr/aarch64-linux-gnu/include/sys/time.h is missing; install-build-tools.sh should install libc6-dev-arm64-cross, and 5.4 header tests may still fail without it" >&2
     fi
-  else
-    echo "Skipping 5.4 UAPI sysroot patch because SKIP_HEADERS_INSTALL=1"
+    if [ ! -f /usr/aarch64-linux-gnu/include/sys/ioctl.h ]; then
+      echo "Warning: /usr/aarch64-linux-gnu/include/sys/ioctl.h is missing; install-build-tools.sh should install libc6-dev-arm64-cross, and 5.4 header tests may still fail without it" >&2
+    fi
+    if [ ! -f /usr/aarch64-linux-gnu/include/sys/types.h ]; then
+      echo "Warning: /usr/aarch64-linux-gnu/include/sys/types.h is missing; install-build-tools.sh should install libc6-dev-arm64-cross, and 5.4 header tests may still fail without it" >&2
+    fi
+    add_default_build_env "UAPI_SYSROOT_CFLAGS" "--target=aarch64-linux-gnu -isystem /usr/aarch64-linux-gnu/include"
+    echo "Auto-added UAPI_SYSROOT_CFLAGS for 5.4 header tests: /usr/aarch64-linux-gnu/include"
   fi
 fi
 

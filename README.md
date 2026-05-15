@@ -124,7 +124,7 @@ CORESHIFT_APT_UPGRADE=1 ./scripts/install-build-tools.sh
 
 That is slower and less reproducible than the default update-and-install path.
 
-For `android*-5.4-lts` profiles, `scripts/build-kernel.sh` can patch `common/usr/include/Makefile` in the prepared workspace so exported UAPI header tests append `UAPI_SYSROOT_CFLAGS`. When header install/tests are enabled, the default sysroot points at `/usr/aarch64-linux-gnu/include`, which helps old 5.4 header tests find libc headers such as `sys/time.h`. GitHub Actions workflows get the needed cross libc packages through `./scripts/install-build-tools.sh`.
+For `android*-5.4-lts` profiles, `scripts/build-kernel.sh` always patches `common/usr/include/Makefile` in the prepared workspace so exported UAPI header tests append `UAPI_SYSROOT_CFLAGS`. This is required because 5.4 can still run `usr/include/*.hdrtest` even when header-install skip variables are set. The default sysroot points at `/usr/aarch64-linux-gnu/include`, which helps old 5.4 header tests find libc headers such as `sys/time.h`. GitHub Actions workflows get the needed cross libc packages through `./scripts/install-build-tools.sh`.
 
 You can still override that explicitly:
 
@@ -144,13 +144,13 @@ For `google_build_sh` private builds, the old CoreShift-safe defaults are now ap
 - `SKIP_EXT_MODULES=1`
 - `SKIP_HEADERS_INSTALL=1`
 
-This matches the old working CoreShift-GKI behavior where applicable. Header install/tests are skipped by default on the `google_build_sh` path. To run strict header tests anyway, pass:
+This matches the old working CoreShift-GKI behavior where applicable. Header install/tests are skipped by default on the `google_build_sh` path, but the 5.4 UAPI Makefile patch is still applied because those hdrtests may still run anyway. To run strict header tests explicitly, pass:
 
 ```bash
 ./scripts/build-kernel.sh android12-5.4-lts --build-env SKIP_HEADERS_INSTALL=0
 ```
 
-On 5.4 profiles, that also re-enables the UAPI sysroot patching path and default `UAPI_SYSROOT_CFLAGS` wiring.
+On 5.4 profiles, `UAPI_SYSROOT_CFLAGS` is still available by default unless you override it yourself. This does not patch kernel UAPI header source files.
 
 This is separate from skipping header install/tests. If you intentionally want the fast/private path, you can still pass:
 
