@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--variant VARIANT] [--skip-setup] [--clean] [--skip-ak3] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
+Usage: scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--variant VARIANT] [--skip-setup] [--clean] [--skip-ak3] [--no-commit-workspace] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
 
 Builds an ACK/GKI kernel for the named profile using the manifest workspace helpers.
 
@@ -39,6 +39,7 @@ VARIANT="vanilla"
 SKIP_SETUP=0
 CLEAN=0
 SKIP_AK3=0
+NO_COMMIT_WORKSPACE=0
 DISABLE_DEFCONFIG_CHECK="off"
 DISABLE_KMI_CHECK="off"
 BUILD_ENV=()
@@ -149,6 +150,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --skip-ak3)
       SKIP_AK3=1
+      shift
+      ;;
+    --no-commit-workspace)
+      NO_COMMIT_WORKSPACE=1
       shift
       ;;
     --disable-defconfig-check)
@@ -469,6 +474,14 @@ if [ "$is_54_profile" -eq 1 ]; then
   fi
 fi
 
+if [ "$DISABLE_DEFCONFIG_CHECK" = "on" ]; then
+  "$REPO_ROOT/scripts/disable-defconfig-check.sh" "$WORKSPACE_DIR"
+fi
+
+if [ "$DISABLE_KMI_CHECK" = "on" ]; then
+  "$REPO_ROOT/scripts/disable-kmi-check.sh" "$WORKSPACE_DIR"
+fi
+
 if [ "$SELECTED_MODE" = "google_build_sh" ] && command -v ccache >/dev/null 2>&1; then
   # shellcheck source=/dev/null
   . "$REPO_ROOT/scripts/setup-ccache-wrappers.sh" "$WORKSPACE_DIR" "$EFFECTIVE_BUILD_CONFIG"
@@ -485,12 +498,10 @@ if [ "$SELECTED_MODE" = "google_build_sh" ] && command -v ccache >/dev/null 2>&1
   fi
 fi
 
-if [ "$DISABLE_DEFCONFIG_CHECK" = "on" ]; then
-  "$REPO_ROOT/scripts/disable-defconfig-check.sh" "$WORKSPACE_DIR"
-fi
-
-if [ "$DISABLE_KMI_CHECK" = "on" ]; then
-  "$REPO_ROOT/scripts/disable-kmi-check.sh" "$WORKSPACE_DIR"
+if [ "$NO_COMMIT_WORKSPACE" -eq 0 ]; then
+  "$REPO_ROOT/scripts/commit-workspace-changes.sh" "$WORKSPACE_DIR"
+else
+  echo "Skipping workspace commit because --no-commit-workspace was requested."
 fi
 
 if has_build_env_key "CORESHIFT_CCACHE_DEBUG" && ! has_build_env_key "CCACHE_LOGFILE"; then

@@ -39,6 +39,7 @@ jobs:
           bash -n scripts/setup-manifest-workspace.sh
           bash -n scripts/run-manifest-build.sh
           bash -n scripts/build-kernel.sh
+          bash -n scripts/commit-workspace-changes.sh
           bash -n scripts/package-ak3.sh
           bash -n scripts/patch-54-uapi-sysroot.sh
           bash -n scripts/prepare-private-fragment.sh

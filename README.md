@@ -84,13 +84,14 @@ This entrypoint will:
 4. Initialize or refresh the ACK manifest workspace unless `--skip-setup` is used.
 5. Select `google_build_sh` automatically when available, with `kleaf` as an explicit mode or auto fallback when `build/build.sh` is unavailable and the profile defines `bazel_target`.
 6. Generate `common/private.fragment` from the fixed CoreShift layering model.
-7. Collect common build artifacts into `dist/<profile>/`.
-8. Package a flashable AnyKernel3 zip into `dist/<profile>/` unless `--skip-ak3` is used.
+7. Commit generated source/workspace changes inside `.work/<profile>/common` before the build so the kernel tree is not left dirty from CoreShift preparation.
+8. Collect common build artifacts into `dist/<profile>/`.
+9. Package a flashable AnyKernel3 zip into `dist/<profile>/` unless `--skip-ak3` is used.
 
 Usage:
 
 ```bash
-scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--variant VARIANT] [--skip-setup] [--clean] [--skip-ak3] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
+scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--variant VARIANT] [--skip-setup] [--clean] [--skip-ak3] [--no-commit-workspace] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
 ```
 
 Local build environment passthrough:
@@ -162,7 +163,7 @@ This is separate from skipping header install/tests. If you intentionally want t
 For large local builds, especially full-LTO runs, you can also add swap before compiling:
 
 ```bash
-./scripts/add-swap.sh 16
+./scripts/add-swap.sh 24
 ```
 
 You can also prepare `ccache` locally before building:
@@ -327,6 +328,20 @@ AK3 zip suffixes are driven by the resolved variant:
 - `ksu-susfs` -> `<kernel_version>-CoreShift-KSU-SUSFS.zip`
 - `ksu-susfs-bbg` -> `<kernel_version>-CoreShift-KSU-SUSFS-BBG.zip`
 
+### Workspace commit
+
+CoreShift commits generated workspace and source changes inside the temporary `.work/<profile>/common` git repo before building. This helps avoid `-dirty` in kernel version strings after CoreShift preparation updates files such as generated fragments, generated build configs, or pre-build source patches.
+
+- It does not push anything.
+- It does not modify upstream remotes.
+- It does not affect this repository or the user's main repo.
+
+Local users can disable the pre-build workspace commit:
+
+```bash
+./scripts/build-kernel.sh android12-5.4-lts --no-commit-workspace
+```
+
 ### Private fragment model
 
 CoreShift uses a fixed fragment layer order:
@@ -377,7 +392,13 @@ They install the latest versions available from the configured Ubuntu runner apt
 
 The workflows also restore and save `~/.cache/ccache` with `actions/cache`, run `./scripts/setup-ccache.sh`, and print `ccache -s` plus `ccache --show-config` before and after each build.
 
-They also add a 24GB swap file before kernel compilation.
+CI uses a 24GB swap file before kernel compilation with aggressive swap tuning.
+
+This helps memory-spiky LTO/Kleaf builds survive late link stages.
+
+It can slow builds if the runner starts heavily swapping.
+
+If `android14-5.15-lts` still dies with aggressive swap, the issue is likely not simple swap size and should be tested with LTO reduced or disabled.
 
 The default workflow intentionally does not expose `repository`, `ref`, `mode`, or `extra_args`. Advanced users can edit `Build.yml` directly or run `scripts/build-kernel.sh` manually.
 

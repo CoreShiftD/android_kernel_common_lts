@@ -1,26 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SIZE_GB="${1:-16}"
+SIZE_GB="${1:-24}"
+AGGRESSIVE_MODE="${2:-}"
+SWAPFILE="/swapfile"
+
+usage() {
+  echo "Usage: $0 [size-gb] [--aggressive]" >&2
+}
+
+show_diagnostics() {
+  free -h
+  swapon --show
+  cat /proc/meminfo | grep -E 'MemTotal|MemAvailable|SwapTotal|SwapFree' || true
+  sysctl vm.swappiness vm.vfs_cache_pressure vm.page-cluster || true
+}
+
+set_sysctl_if_supported() {
+  local key="$1"
+  local value="$2"
+
+  sudo sysctl -w "${key}=${value}" || true
+}
 
 if ! [[ "$SIZE_GB" =~ ^[0-9]+$ ]] || [ "$SIZE_GB" -le 0 ]; then
   echo "Swap size must be a positive integer number of GiB: $SIZE_GB" >&2
   exit 1
 fi
 
-if swapon --show --noheadings | grep -q .; then
-  echo "Swap already active:"
-  free -h
-  swapon --show
-  exit 0
+if [ -n "$AGGRESSIVE_MODE" ] && [ "$AGGRESSIVE_MODE" != "--aggressive" ]; then
+  usage
+  exit 1
 fi
 
-RUNNER_TEMP_DIR="${RUNNER_TEMP:-/tmp}"
+if [ "$#" -gt 2 ]; then
+  usage
+  exit 1
+fi
 
-if sudo test -w /; then
-  SWAPFILE="/swapfile"
-else
-  SWAPFILE="$RUNNER_TEMP_DIR/coreshift-swapfile"
+echo "Swap diagnostics before setup:"
+show_diagnostics
+
+if sudo test -e "$SWAPFILE"; then
+  echo "Removing existing $SWAPFILE"
+  sudo swapoff "$SWAPFILE" || true
+  sudo rm -f "$SWAPFILE"
 fi
 
 echo "Creating ${SIZE_GB}G swap at $SWAPFILE"
@@ -32,12 +56,23 @@ fi
 
 sudo chmod 600 "$SWAPFILE"
 sudo mkswap "$SWAPFILE"
-sudo swapon "$SWAPFILE"
 
-if ! swapon --show --noheadings | grep -q .; then
+if [ "$AGGRESSIVE_MODE" = "--aggressive" ]; then
+  sudo swapon --priority 100 "$SWAPFILE"
+else
+  sudo swapon "$SWAPFILE"
+fi
+
+if ! swapon --show --noheadings | grep -Fq "$SWAPFILE"; then
   echo "Failed to enable swap at $SWAPFILE" >&2
   exit 1
 fi
 
-free -h
-swapon --show
+if [ "$AGGRESSIVE_MODE" = "--aggressive" ]; then
+  set_sysctl_if_supported vm.swappiness 80
+  set_sysctl_if_supported vm.vfs_cache_pressure 200
+  set_sysctl_if_supported vm.page-cluster 0
+fi
+
+echo "Swap diagnostics after setup:"
+show_diagnostics

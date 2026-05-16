@@ -46,13 +46,13 @@ jobs:
 
           matrix_json="$(python3 scripts/resolve-build-matrix.py "${args[@]}")"
           matrix_count="$(python3 - <<'PY' "$matrix_json"
-import json
-import sys
+          import json
+          import sys
 
-data = json.loads(sys.argv[1])
-print(len(data["include"]))
-PY
-)"
+          data = json.loads(sys.argv[1])
+          print(len(data["include"]))
+          PY
+          )"
 
           echo "matrix=$matrix_json" >> "$GITHUB_OUTPUT"
           echo "count=$matrix_count" >> "$GITHUB_OUTPUT"
@@ -98,7 +98,7 @@ PY
 
       - name: Add swap
         shell: bash
-        run: ./scripts/add-swap.sh 24
+        run: ./scripts/add-swap.sh 24 --aggressive
 
       - name: Build kernel
         shell: bash

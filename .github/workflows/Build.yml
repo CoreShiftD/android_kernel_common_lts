@@ -78,7 +78,7 @@ jobs:
 
       - name: Add swap
         shell: bash
-        run: ./scripts/add-swap.sh 24
+        run: ./scripts/add-swap.sh 24 --aggressive
 
       - name: Ccache stats before build
         shell: bash
