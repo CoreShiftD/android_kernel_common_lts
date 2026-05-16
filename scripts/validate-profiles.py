@@ -28,6 +28,8 @@ REQUIRED_FIELDS = (
     "bazel_target",
 )
 
+VALID_LTO_VALUES = ("full", "thin", "none", "default")
+
 
 def fail(message: str) -> None:
     raise SystemExit(message)
@@ -54,6 +56,11 @@ def validate_profile(path: Path) -> str:
     bazel_target = data["bazel_target"]
     if bazel_target is not None and (not isinstance(bazel_target, str) or not bazel_target):
         fail(f"{path}: field 'bazel_target' must be a non-empty string or null")
+
+    lto = data.get("lto")
+    if lto is not None and lto not in VALID_LTO_VALUES:
+        allowed = ", ".join(VALID_LTO_VALUES)
+        fail(f"{path}: field 'lto' must be one of: {allowed}")
 
     name = data["name"]
     manifest_branch = data["manifest_branch"]

@@ -51,6 +51,8 @@ USER_SET_UAPI_SYSROOT_CFLAGS=0
 USER_SET_LTO=0
 USER_LTO_VALUE=""
 EXTRA_ARGS=()
+PROFILE_LTO="full"
+EFFECTIVE_LTO=""
 
 has_build_env_key() {
   local wanted="$1"
@@ -252,6 +254,59 @@ command -v python3 >/dev/null 2>&1 || {
 
 python3 "$REPO_ROOT/scripts/validate-profiles.py"
 
+mapfile -t profile_build_fields < <(
+  python3 - "$PROFILE_JSON" <<'PY'
+import json
+import sys
+
+profile_path = sys.argv[1]
+
+with open(profile_path, encoding="utf-8") as fh:
+    profile = json.load(fh)
+
+for field in ("build_config", "bazel_target"):
+    value = profile.get(field)
+    if value is None:
+        print("")
+    elif isinstance(value, str) and value:
+        print(value)
+    else:
+        raise SystemExit(
+            f"{profile_path}: profile field {field!r} must be a non-empty string or null"
+        )
+
+lto = profile.get("lto", "full")
+if lto not in {"full", "thin", "none", "default"}:
+    raise SystemExit(
+        f"{profile_path}: profile field 'lto' must be one of: full, thin, none, default"
+    )
+print(lto)
+PY
+)
+
+BUILD_CONFIG="${profile_build_fields[0]:-}"
+BAZEL_TARGET="${profile_build_fields[1]:-}"
+PROFILE_LTO="${profile_build_fields[2]:-full}"
+EFFECTIVE_LTO="$PROFILE_LTO"
+
+if [ "$USER_SET_LTO" -eq 1 ]; then
+  EFFECTIVE_LTO="$USER_LTO_VALUE"
+fi
+
+if [ "$PROFILE_NAME" = "android16-6.12-lts" ] && [ "$USER_SET_LTO" -eq 1 ] && [ "$USER_LTO_VALUE" = "full" ]; then
+  echo "android16-6.12-lts does not allow LTO=full because full LTO breaks the Kleaf/Rust binder module output. Use thin/default/none." >&2
+  exit 1
+fi
+
+if [ "$PROFILE_NAME" = "android16-6.12-lts" ]; then
+  for extra_arg in "${EXTRA_ARGS[@]}"; do
+    if [ "$extra_arg" = "--lto=full" ]; then
+      echo "android16-6.12-lts does not allow --lto=full." >&2
+      exit 1
+    fi
+  done
+fi
+
 matrix_json="$(
   python3 "$REPO_ROOT/scripts/resolve-build-matrix.py" \
     --profile "$PROFILE_NAME" \
@@ -363,32 +418,6 @@ do
   append_passthrough_build_env_if_unset "$passthrough_key"
 done
 
-mapfile -t profile_build_fields < <(
-  python3 - "$PROFILE_JSON" <<'PY'
-import json
-import sys
-
-profile_path = sys.argv[1]
-
-with open(profile_path, encoding="utf-8") as fh:
-    profile = json.load(fh)
-
-for field in ("build_config", "bazel_target"):
-    value = profile.get(field)
-    if value is None:
-        print("")
-    elif isinstance(value, str) and value:
-        print(value)
-    else:
-        raise SystemExit(
-            f"{profile_path}: profile field {field!r} must be a non-empty string or null"
-        )
-PY
-)
-
-BUILD_CONFIG="${profile_build_fields[0]:-}"
-BAZEL_TARGET="${profile_build_fields[1]:-}"
-
 resolve_mode() {
   if [ "$MODE" != "auto" ]; then
     printf '%s\n' "$MODE"
@@ -420,7 +449,6 @@ resolve_mode() {
 }
 
 SELECTED_MODE="$(resolve_mode)"
-EFFECTIVE_LTO=""
 EFFECTIVE_JOBS=""
 BUILD_CONFIG_OVERRIDE_VALUE=""
 EFFECTIVE_BUILD_CONFIG=""
@@ -442,12 +470,6 @@ if [ "$SELECTED_MODE" = "google_build_sh" ]; then
   add_default_build_env "SKIP_HEADERS_INSTALL" "1"
   add_default_build_env "CORESHIFT_JOBS" "4"
   add_default_build_env "MAKEFLAGS" "-j4"
-  if [ "$USER_SET_LTO" -eq 0 ]; then
-    add_default_build_env "LTO" "thin"
-    EFFECTIVE_LTO="thin"
-  else
-    EFFECTIVE_LTO="$USER_LTO_VALUE"
-  fi
   if [ "$EFFECTIVE_LTO" = "full" ]; then
     add_default_build_env "LLVM_PARALLEL_LINK_JOBS" "1"
     add_default_build_env "LLD_PARALLEL_LINK_JOBS" "1"
@@ -556,8 +578,8 @@ fi
 if [ -n "$BUILD_CONFIG_OVERRIDE_VALUE" ]; then
   echo "  build config override: $BUILD_CONFIG_OVERRIDE_VALUE"
 fi
+echo "  effective LTO: ${EFFECTIVE_LTO:-}"
 if [ "$SELECTED_MODE" = "google_build_sh" ]; then
-  echo "  effective LTO: ${EFFECTIVE_LTO:-}"
   echo "  effective jobs: ${EFFECTIVE_JOBS:-}"
 fi
 print_key_section "user build env" "${USER_BUILD_ENV_KEYS[@]}"

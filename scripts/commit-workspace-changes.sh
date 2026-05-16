@@ -33,8 +33,6 @@ git -C "$COMMON_DIR" config user.name "CoreShift Builder"
 git -C "$COMMON_DIR" config user.email "coreshift-builder@localhost"
 
 for metadata_path in \
-  "$COMMON_DIR/Baseband-guard/.git" \
-  "$COMMON_DIR/KernelSU/.git" \
   "$COMMON_DIR/Baseband-guard/.github" \
   "$COMMON_DIR/KernelSU/.github"
 do
@@ -56,8 +54,14 @@ if [ "${#nested_git_paths[@]}" -gt 0 ]; then
 
   for nested_git_path in "${nested_git_paths[@]}"; do
     case "$nested_git_path" in
-      "$COMMON_DIR/Baseband-guard/"*"/.git"|"$COMMON_DIR/Baseband-guard/.git"|"$COMMON_DIR/KernelSU/"*"/.git"|"$COMMON_DIR/KernelSU/.git")
-        rm -rf "$nested_git_path"
+      "$COMMON_DIR/KernelSU/.git")
+        echo "Keeping KernelSU/.git for KSU_GIT_VERSION during build." >&2
+        ;;
+      "$COMMON_DIR/Baseband-guard/.git")
+        echo "Keeping Baseband-guard/.git for BBG version metadata during build." >&2
+        ;;
+      "$COMMON_DIR/Baseband-guard/"*"/.git"|"$COMMON_DIR/KernelSU/"*"/.git")
+        unexpected_nested_git+=("$nested_git_path")
         ;;
       *)
         unexpected_nested_git+=("$nested_git_path")
@@ -74,7 +78,9 @@ fi
 git -C "$COMMON_DIR" add -A -- . \
   ":(exclude)out/" \
   ":(exclude)dist/" \
-  ":(exclude).packaging/"
+  ":(exclude).packaging/" \
+  ":(exclude)KernelSU/" \
+  ":(exclude)Baseband-guard/"
 
 staged_raw_diff="$(git -C "$COMMON_DIR" diff --cached --raw)"
 if printf '%s\n' "$staged_raw_diff" | grep -Eq '(^|[[:space:]])160000[[:space:]]+160000[[:space:]]|(^|[[:space:]])160000[[:space:]]+[0-7]{6}[[:space:]]|(^|[[:space:]])[0-7]{6}[[:space:]]+160000[[:space:]]'; then

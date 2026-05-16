@@ -83,7 +83,7 @@ This entrypoint will:
 3. Create or reuse `.work/<profile>`.
 4. Initialize or refresh the ACK manifest workspace unless `--skip-setup` is used.
 5. Select `google_build_sh` automatically when available, with `kleaf` as an explicit mode or auto fallback when `build/build.sh` is unavailable and the profile defines `bazel_target`.
-6. Generate `common/private.fragment` from the fixed CoreShift layering model.
+6. Generate `common/private.fragment`, `common/lto.fragment`, and `common/features.fragment` from the fixed CoreShift layering model.
 7. Commit generated source/workspace changes inside `.work/<profile>/common` before the build so the kernel tree is not left dirty from CoreShift preparation.
 8. Collect common build artifacts into `dist/<profile>/`.
 9. Package a flashable AnyKernel3 zip into `dist/<profile>/` unless `--skip-ak3` is used.
@@ -179,12 +179,21 @@ You can also prepare `ccache` locally before building:
 ccache -s
 ```
 
-For `google_build_sh`, default LTO is `thin` unless you pass `LTO` yourself. Default jobs are always kept at 4:
+LTO is profile-aware:
+
+- All current profile JSON files declare `lto` explicitly.
+- Current policy is `"lto": "full"` for every profile except `android16-6.12-lts`.
+- `android16-6.12-lts` sets `"lto": "thin"` because full LTO caused `rust_binder.ko` to disappear from Kleaf outputs.
+- Full LTO overrides are intentionally rejected for `android16-6.12-lts` when passed through `--build-env LTO=full`, `private.fragment`, or `-- --lto=full`.
+- On other profiles, users can still override LTO with `private.fragment` or `--build-env LTO=...`.
+- Missing profile `lto` is still accepted for forward compatibility, but all current profiles set it explicitly so effective LTO comes from the profile field rather than an implied default.
+
+For `google_build_sh`, default jobs are always kept at 4:
 
 - `CORESHIFT_JOBS=4`
 - `MAKEFLAGS=-j4`
 
-If you switch to `LTO=full`, compile jobs still stay at 4. Only LLVM/LLD link parallelism is throttled by default:
+If the effective LTO is `full`, compile jobs still stay at 4. Only LLVM/LLD link parallelism is throttled by default:
 
 - `LLVM_PARALLEL_LINK_JOBS=1`
 - `LLD_PARALLEL_LINK_JOBS=1`
@@ -327,6 +336,13 @@ Current workflow split:
 - Feature repos are shallow-cloned for CI speed.
 - `bbg` writes variant-owned config into `common/features.fragment`, including quoted `CONFIG_LSM` with `baseband_guard`.
 - `ksu` writes variant-owned config into `common/features.fragment`.
+- CoreShift defaults live in `configs/fragments/coreshift.fragment`.
+- Every current profile JSON declares `lto` explicitly.
+- All current profiles use full LTO except `android16-6.12-lts`, which uses thin LTO.
+- `android16-6.12-lts` uses thin LTO because full LTO broke the Kleaf `rust_binder.ko` output.
+- Full LTO overrides are intentionally rejected on `android16-6.12-lts`.
+- Default filesystems enabled are `TMPFS`, `TMPFS_XATTR`, `OVERLAY_FS`, and `FUSE_FS`.
+- KernelSU and Baseband-guard are kept as temporary git checkouts during build for version metadata.
 - Users can still pin refs with `--build-env KSU_REF=<commit-or-tag>` and `--build-env BBG_REF=<commit-or-tag>`.
 
 AK3 zip suffixes are driven by the resolved variant:
@@ -343,7 +359,8 @@ CoreShift commits generated workspace and source changes inside the temporary `.
 - It does not push anything.
 - It does not modify upstream remotes.
 - It does not affect this repository or the user's main repo.
-- It removes staged feature checkout `.git` and `.github` metadata before the prepared workspace commit.
+- It keeps `KernelSU/.git` and `Baseband-guard/.git` during build for version metadata.
+- It excludes both `KernelSU/` and `Baseband-guard/` from the prepared workspace commit and still removes their `.github` metadata.
 - It scans for unexpected nested `.git` paths under `common/` and refuses to continue if they are not part of the known feature staging dirs.
 - It refuses staged gitlinks or submodule-like `160000` entries, so embedded git repositories/submodules cannot be committed accidentally.
 
@@ -360,6 +377,8 @@ CoreShift uses a fixed fragment layer order:
 1. base ACK defconfig
 2. CoreShift default fragment
 3. user `private.fragment` last
+4. profile `lto.fragment`
+5. variant `features.fragment`
 
 `private.fragment` lives at the repo root and is intentionally local and user-editable. Use Kconfig fragment syntax, not a full `.config`. User `private.fragment` content is always layered last, so duplicate `CONFIG_` values there win over earlier layers.
 
@@ -372,6 +391,7 @@ CoreShift ships:
 
 - `common/private.fragment`
 - `common/private.required`
+- `common/lto.fragment`
 - `common/features.fragment`
 - `common/coreshift.kleaf.fragment`
 
@@ -381,11 +401,14 @@ Ownership model:
 
 - repo-root `private.fragment`: user-owned input
 - `configs/fragments/coreshift.fragment`: baseline-owned input
+- `common/lto.fragment`: profile-owned generated output
 - `common/features.fragment`: variant-owned generated output
 
-`google_build_sh` merges base defconfig plus `common/private.fragment` plus `common/features.fragment`.
+`configs/fragments/coreshift.fragment` carries the baseline CoreShift defaults, including the filesystem defaults. Repo-root `private.fragment` is still merged last so users can override those defaults, except that `android16-6.12-lts` intentionally rejects `CONFIG_LTO_CLANG_FULL=y`.
 
-Kleaf consumes `common/coreshift.kleaf.fragment`, which is generated as `common/private.fragment` plus `common/features.fragment`.
+`google_build_sh` merges base defconfig plus `common/private.fragment` plus `common/lto.fragment` plus `common/features.fragment`.
+
+Kleaf consumes `common/coreshift.kleaf.fragment`, which is generated as `common/private.fragment` plus `common/lto.fragment` plus `common/features.fragment`.
 
 ### Private build escape hatches
 

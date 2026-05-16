@@ -145,7 +145,6 @@ bbg_lsm_value="$(update_bbg_fragment)"
 echo "BBG CONFIG_LSM=\"$bbg_lsm_value\""
 
 bbg_commit="$(git -C "$BBG_DIR" rev-parse HEAD)"
-rm -rf "$BBG_DIR/.git"
 rm -rf "$BBG_DIR/.github"
 echo "BBG commit: $bbg_commit"
 echo "BBG source staged at: $BBG_DIR"

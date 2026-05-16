@@ -72,7 +72,6 @@ fi
 ensure_line_once 'CONFIG_KSU=y' "$FEATURES_FRAGMENT"
 
 ksu_commit="$(git -C "$KSU_DIR" rev-parse HEAD)"
-rm -rf "$KSU_DIR/.git"
 rm -rf "$KSU_DIR/.github"
 echo "KernelSU commit: $ksu_commit"
 echo "KernelSU source staged at: $KSU_DIR"
