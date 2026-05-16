@@ -281,11 +281,6 @@ export CORESHIFT_VARIANT="$RESOLVED_VARIANT"
 export CORESHIFT_FEATURES="$CORESHIFT_FEATURES_VALUE"
 export CORESHIFT_AK3_SUFFIXES="$CORESHIFT_AK3_SUFFIXES_VALUE"
 
-if [ "$RESOLVED_VARIANT" != "vanilla" ] && [ -n "$CORESHIFT_FEATURES_VALUE" ]; then
-  echo "Variant $RESOLVED_VARIANT is defined, but feature patching is not implemented yet." >&2
-  exit 1
-fi
-
 for reserved_variant_key in CORESHIFT_VARIANT CORESHIFT_FEATURES CORESHIFT_AK3_SUFFIXES; do
   if has_build_env_key "$reserved_variant_key"; then
     echo "--build-env must not set reserved variant key: $reserved_variant_key" >&2
@@ -359,6 +354,10 @@ for passthrough_key in \
   CCACHE_WRAPPER_DIR \
   CCACHE_PATH \
   CORESHIFT_CCACHE_DEBUG \
+  BBG_REPO \
+  BBG_REF \
+  KSU_REPO \
+  KSU_REF \
   USE_CCACHE
 do
   append_passthrough_build_env_if_unset "$passthrough_key"
@@ -456,6 +455,12 @@ if [ "$SELECTED_MODE" = "google_build_sh" ]; then
   EFFECTIVE_JOBS="$(get_build_env_value "CORESHIFT_JOBS")"
 fi
 
+for feature_env_key in BBG_REPO BBG_REF KSU_REPO KSU_REF; do
+  if has_build_env_key "$feature_env_key"; then
+    export "$feature_env_key=$(get_build_env_value "$feature_env_key")"
+  fi
+done
+
 if [ "$is_54_profile" -eq 1 ]; then
   "$REPO_ROOT/scripts/patch-54-uapi-sysroot.sh" "$WORKSPACE_DIR"
   echo "Applied 5.4 UAPI sysroot patch"
@@ -473,6 +478,8 @@ if [ "$is_54_profile" -eq 1 ]; then
     echo "Auto-added UAPI_SYSROOT_CFLAGS for 5.4 header tests: /usr/aarch64-linux-gnu/include"
   fi
 fi
+
+"$REPO_ROOT/scripts/apply-features.sh" "$WORKSPACE_DIR" "$CORESHIFT_FEATURES_VALUE"
 
 if [ "$DISABLE_DEFCONFIG_CHECK" = "on" ]; then
   "$REPO_ROOT/scripts/disable-defconfig-check.sh" "$WORKSPACE_DIR"

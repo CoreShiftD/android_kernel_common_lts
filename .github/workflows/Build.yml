@@ -25,6 +25,9 @@ on:
         type: choice
         options:
           - vanilla
+          - bbg
+          - ksu
+          - ksu-bbg
       private_fragment:
         description: "Optional Kconfig fragment content layered last. Leave empty for defaults."
         required: false

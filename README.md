@@ -275,49 +275,59 @@ Local users can skip packaging if they only want the raw collected outputs:
 
 ### Build variants
 
-CoreShift now has a JSON-driven build variant foundation:
+CoreShift uses a JSON-driven variant model:
 
 - `profiles/*.json` defines kernel branches and build backends
 - `configs/variants.json` defines what a variant means
 - `configs/profile-variants.json` defines which variants are allowed for each profile
 
-Variants are feature combinations, not separate hardcoded flows:
+Implemented optional features:
 
-- `vanilla` means baseline CoreShift only, with no optional feature patches
-- `bbg` is independent and can later be built without KernelSU or SUSFS
-- `susfs` requires `ksu`, so there is no `susfs`-only variant
+- `bbg` via upstream `Baseband-guard/setup.sh`
+- `ksu` via upstream `KernelSU/kernel/setup.sh`
 
-Only `vanilla` is enabled initially in `configs/profile-variants.json`. Non-vanilla definitions are present for future work, but KernelSU, SUSFS, and BBG patching are not implemented in this commit and are not enabled for any profile yet.
+Not implemented yet:
 
-Future profile mappings can later grow from:
+- `susfs`
 
-```json
-{
-  "profiles": {
-    "android12-5.10-lts": ["vanilla"]
-  }
-}
+Enabled variants by profile generation:
+
+- `bbg` is enabled for all current profiles
+- `ksu` and `ksu-bbg` are enabled for 5.10+ profiles only
+
+5.4 `ksu` is disabled by default because current KernelSU `main` includes `linux/pgtable.h`, which is missing on the tested 5.4 ACK common trees.
+
+Feature application uses the resolved variant feature list in stable order:
+
+- `ksu` first
+- `bbg` second
+
+This matters for `ksu-bbg`.
+
+Defaults:
+
+- `BBG_REF=main`
+- `KSU_REF=main`
+
+Users who want pinned or reproducible builds can override refs explicitly:
+
+```bash
+./scripts/build-kernel.sh android12-5.10-lts --variant ksu-bbg \
+  --build-env KSU_REF=<commit-or-tag> \
+  --build-env BBG_REF=<commit-or-tag>
 ```
 
-to:
-
-```yaml
-android12-5.10-lts:
-  - vanilla
-  - bbg
-  - ksu
-  - ksu-bbg
-  - ksu-susfs
-  - ksu-susfs-bbg
-```
-
-once the corresponding patch flows exist.
+Users who want to experiment with 5.4 KernelSU can edit `configs/profile-variants.json` locally and pin `KSU_REF` to a known-good 5.4-compatible commit.
 
 Current workflow split:
 
 - `Build.yml`: one profile plus one explicitly chosen variant
 - `Build-All.yml`: all profiles, vanilla baseline only
-- `Build-Variants.yml`: JSON-driven allowed profile x variant matrix
+- `Build-Variants.yml`: JSON-driven allowed profile x variant matrix for all enabled profile/variant combinations
+- Feature repos are shallow-cloned for CI speed.
+- `bbg` writes variant-owned config into `common/features.fragment`, including quoted `CONFIG_LSM` with `baseband_guard`.
+- `ksu` writes variant-owned config into `common/features.fragment`.
+- Users can still pin refs with `--build-env KSU_REF=<commit-or-tag>` and `--build-env BBG_REF=<commit-or-tag>`.
 
 AK3 zip suffixes are driven by the resolved variant:
 
@@ -325,8 +335,6 @@ AK3 zip suffixes are driven by the resolved variant:
 - `bbg` -> `<kernel_version>-CoreShift-BBG.zip`
 - `ksu` -> `<kernel_version>-CoreShift-KSU.zip`
 - `ksu-bbg` -> `<kernel_version>-CoreShift-KSU-BBG.zip`
-- `ksu-susfs` -> `<kernel_version>-CoreShift-KSU-SUSFS.zip`
-- `ksu-susfs-bbg` -> `<kernel_version>-CoreShift-KSU-SUSFS-BBG.zip`
 
 ### Workspace commit
 
@@ -335,6 +343,9 @@ CoreShift commits generated workspace and source changes inside the temporary `.
 - It does not push anything.
 - It does not modify upstream remotes.
 - It does not affect this repository or the user's main repo.
+- It removes staged feature checkout `.git` and `.github` metadata before the prepared workspace commit.
+- It scans for unexpected nested `.git` paths under `common/` and refuses to continue if they are not part of the known feature staging dirs.
+- It refuses staged gitlinks or submodule-like `160000` entries, so embedded git repositories/submodules cannot be committed accidentally.
 
 Local users can disable the pre-build workspace commit:
 
@@ -357,12 +368,24 @@ CoreShift ships:
 - `configs/fragments/coreshift.fragment`
 - `configs/fragments/private.fragment.example`
 
-`scripts/prepare-private-fragment.sh` combines them into:
+`scripts/prepare-private-fragment.sh` generates:
 
 - `common/private.fragment`
 - `common/private.required`
+- `common/features.fragment`
+- `common/coreshift.kleaf.fragment`
 
 If you do not create a repo-root `private.fragment`, builds continue normally using only the CoreShift default fragment.
+
+Ownership model:
+
+- repo-root `private.fragment`: user-owned input
+- `configs/fragments/coreshift.fragment`: baseline-owned input
+- `common/features.fragment`: variant-owned generated output
+
+`google_build_sh` merges base defconfig plus `common/private.fragment` plus `common/features.fragment`.
+
+Kleaf consumes `common/coreshift.kleaf.fragment`, which is generated as `common/private.fragment` plus `common/features.fragment`.
 
 ### Private build escape hatches
 

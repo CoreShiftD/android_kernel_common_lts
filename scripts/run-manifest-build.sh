@@ -152,7 +152,11 @@ case "$BUILD_MODE" in
     fi
     (
       cd "$WORKSPACE_DIR"
-      tools/bazel run "$@" "$BAZEL_TARGET"
+      if [ -f "$WORKSPACE_DIR/common/coreshift.kleaf.fragment" ]; then
+        tools/bazel run --defconfig_fragment=//common:coreshift.kleaf.fragment "$@" "$BAZEL_TARGET"
+      else
+        tools/bazel run "$@" "$BAZEL_TARGET"
+      fi
     )
     ;;
   *)

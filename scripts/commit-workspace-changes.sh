@@ -32,10 +32,57 @@ fi
 git -C "$COMMON_DIR" config user.name "CoreShift Builder"
 git -C "$COMMON_DIR" config user.email "coreshift-builder@localhost"
 
+for metadata_path in \
+  "$COMMON_DIR/Baseband-guard/.git" \
+  "$COMMON_DIR/KernelSU/.git" \
+  "$COMMON_DIR/Baseband-guard/.github" \
+  "$COMMON_DIR/KernelSU/.github"
+do
+  if [ -e "$metadata_path" ]; then
+    rm -rf "$metadata_path"
+  fi
+done
+
+mapfile -t nested_git_paths < <(
+  find "$COMMON_DIR" \
+    -path "$COMMON_DIR/.git" -prune -o \
+    -name .git -print
+)
+
+unexpected_nested_git=()
+if [ "${#nested_git_paths[@]}" -gt 0 ]; then
+  echo "Nested .git paths detected under workspace common:" >&2
+  printf '%s\n' "${nested_git_paths[@]}" >&2
+
+  for nested_git_path in "${nested_git_paths[@]}"; do
+    case "$nested_git_path" in
+      "$COMMON_DIR/Baseband-guard/"*"/.git"|"$COMMON_DIR/Baseband-guard/.git"|"$COMMON_DIR/KernelSU/"*"/.git"|"$COMMON_DIR/KernelSU/.git")
+        rm -rf "$nested_git_path"
+        ;;
+      *)
+        unexpected_nested_git+=("$nested_git_path")
+        ;;
+    esac
+  done
+fi
+
+if [ "${#unexpected_nested_git[@]}" -gt 0 ]; then
+  echo "Error: refusing to continue with unexpected nested git metadata in workspace common." >&2
+  exit 1
+fi
+
 git -C "$COMMON_DIR" add -A -- . \
   ":(exclude)out/" \
   ":(exclude)dist/" \
   ":(exclude).packaging/"
+
+staged_raw_diff="$(git -C "$COMMON_DIR" diff --cached --raw)"
+if printf '%s\n' "$staged_raw_diff" | grep -Eq '(^|[[:space:]])160000[[:space:]]+160000[[:space:]]|(^|[[:space:]])160000[[:space:]]+[0-7]{6}[[:space:]]|(^|[[:space:]])[0-7]{6}[[:space:]]+160000[[:space:]]'; then
+  echo "Error: embedded git repositories/submodules are forbidden in prepared workspace commits." >&2
+  printf '%s\n' "$staged_raw_diff" >&2
+  git -C "$COMMON_DIR" diff --cached --stat
+  exit 1
+fi
 
 if ! git -C "$COMMON_DIR" diff --cached --quiet; then
   git -C "$COMMON_DIR" commit -m "$MESSAGE"

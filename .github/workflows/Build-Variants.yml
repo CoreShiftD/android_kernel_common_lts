@@ -68,6 +68,7 @@ jobs:
   build:
     needs: resolve-matrix
     if: needs.resolve-matrix.outputs.count != '0'
+    name: build ${{ matrix.profile }} / ${{ matrix.variant }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
