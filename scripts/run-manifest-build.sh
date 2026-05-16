@@ -12,7 +12,11 @@ EOF
 
 ccache_warn_if_no_cacheable_calls() {
   local stats_output="$1"
+  local wrappers_enabled="${2:-0}"
   if ! command -v ccache >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ "$wrappers_enabled" != "1" ]; then
     return 0
   fi
   if printf '%s\n' "$stats_output" | grep -Eq 'Cacheable calls:[[:space:]]+0([[:space:]]|$| /)'; then
@@ -109,7 +113,6 @@ case "$BUILD_MODE" in
       fi
       pre_build_ccache_stats="$(ccache -s 2>/dev/null || true)"
       printf '%s\n' "$pre_build_ccache_stats"
-      ccache_warn_if_no_cacheable_calls "$pre_build_ccache_stats"
       echo "selected BUILD_CONFIG=$selected_build_config"
       echo "LTO=${LTO:-}"
       echo "CORESHIFT_JOBS=${CORESHIFT_JOBS:-}"
@@ -126,7 +129,7 @@ case "$BUILD_MODE" in
       fi
       post_build_ccache_stats="$(ccache -s 2>/dev/null || true)"
       printf '%s\n' "$post_build_ccache_stats"
-      ccache_warn_if_no_cacheable_calls "$post_build_ccache_stats"
+      ccache_warn_if_no_cacheable_calls "$post_build_ccache_stats" "${CORESHIFT_CCACHE_WRAPPERS_ENABLED:-0}"
       if [ -n "${CCACHE_LOGFILE:-}" ] && [ -f "$CCACHE_LOGFILE" ]; then
         echo "CCACHE_LOGFILE=$CCACHE_LOGFILE"
         if [ "${CORESHIFT_CCACHE_DEBUG:-0}" = "1" ]; then

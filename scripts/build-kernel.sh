@@ -353,6 +353,16 @@ resolve_mode() {
 SELECTED_MODE="$(resolve_mode)"
 EFFECTIVE_LTO=""
 EFFECTIVE_JOBS=""
+BUILD_CONFIG_OVERRIDE_VALUE=""
+EFFECTIVE_BUILD_CONFIG=""
+
+if [ "$SELECTED_MODE" = "google_build_sh" ] && [ -f "$WORKSPACE_DIR/common/build.config.coreshift.gki.aarch64" ]; then
+  BUILD_CONFIG_OVERRIDE_VALUE="common/build.config.coreshift.gki.aarch64"
+fi
+
+if [ "$SELECTED_MODE" = "google_build_sh" ]; then
+  EFFECTIVE_BUILD_CONFIG="${BUILD_CONFIG_OVERRIDE_VALUE:-$BUILD_CONFIG}"
+fi
 
 if [ "$SELECTED_MODE" = "google_build_sh" ]; then
   add_default_build_env "SKIP_MRPROPER" "1"
@@ -396,7 +406,7 @@ fi
 
 if [ "$SELECTED_MODE" = "google_build_sh" ] && command -v ccache >/dev/null 2>&1; then
   # shellcheck source=/dev/null
-  . "$REPO_ROOT/scripts/setup-ccache-wrappers.sh" "$WORKSPACE_DIR"
+  . "$REPO_ROOT/scripts/setup-ccache-wrappers.sh" "$WORKSPACE_DIR" "$EFFECTIVE_BUILD_CONFIG"
   append_passthrough_build_env_if_unset "CORESHIFT_CCACHE_WRAPPERS_ENABLED"
   if [ "${CORESHIFT_CCACHE_WRAPPERS_ENABLED:-0}" = "1" ]; then
     append_passthrough_build_env_if_unset "CCACHE_WRAPPER_DIR"
@@ -416,11 +426,6 @@ fi
 
 if [ "$DISABLE_KMI_CHECK" = "on" ]; then
   "$REPO_ROOT/scripts/disable-kmi-check.sh" "$WORKSPACE_DIR"
-fi
-
-BUILD_CONFIG_OVERRIDE_VALUE=""
-if [ "$SELECTED_MODE" = "google_build_sh" ] && [ -f "$WORKSPACE_DIR/common/build.config.coreshift.gki.aarch64" ]; then
-  BUILD_CONFIG_OVERRIDE_VALUE="common/build.config.coreshift.gki.aarch64"
 fi
 
 if has_build_env_key "CORESHIFT_CCACHE_DEBUG" && ! has_build_env_key "CCACHE_LOGFILE"; then

@@ -218,7 +218,11 @@ The first run will mostly miss. A second run on the same profile and source shou
 
 For `google_build_sh`, CoreShift now uses wrapper symlinks so `clang`, `clang++`, `gcc`, `g++`, `cc`, and `c++` resolve through `ccache` before the repo-synced toolchains in `PATH`. Those wrappers are only enabled when a repo/AOSP clang is found inside the prepared workspace.
 
+Multiple AOSP clang prebuilts can exist in the same workspace. CoreShift therefore tries to wrap the clang selected by the effective `google_build_sh` build config first, instead of just taking the first `clang` found in the tree.
+
 The wrapper must resolve to repo/AOSP clang, not Ubuntu clang. If no repo clang is found, CoreShift disables wrappers and continues without ccache interception.
+
+If the build-config-selected repo clang cannot run because old compatibility libraries are missing, such as `libncurses.so.5`, CoreShift also disables wrappers and continues without ccache interception. `./scripts/install-build-tools.sh` attempts to install those compatibility libraries when the runner packages still provide them.
 
 CoreShift also enables broader but still reasonable kernel-build cache settings by default. In particular, `CCACHE_IGNOREOPTIONS=--sysroot*` helps avoid sysroot path churn causing misses, but you can override it with `--build-env`.
 

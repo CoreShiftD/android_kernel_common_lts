@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+  echo "Usage: scripts/setup-ccache-wrappers.sh <workspace-dir> [build-config]" >&2
+}
+
 persist_wrapper_state() {
   if [ -n "${GITHUB_ENV:-}" ]; then
     echo "CCACHE_WRAPPER_DIR=${CCACHE_WRAPPER_DIR:-}" >> "$GITHUB_ENV"
@@ -23,42 +27,165 @@ disable_wrappers() {
   echo "$message"
 }
 
-setup_ccache_wrappers() {
-  if [ "$#" -ne 1 ]; then
-    echo "Usage: scripts/setup-ccache-wrappers.sh <workspace-dir>" >&2
+normalize_clang_candidate() {
+  local candidate="$1"
+  local normalized=""
+
+  [ -n "$candidate" ] || return 0
+
+  case "$candidate" in
+    */clang)
+      normalized="$candidate"
+      ;;
+    *)
+      if [ -d "$candidate" ]; then
+        normalized="$candidate/clang"
+      fi
+      ;;
+  esac
+
+  [ -n "$normalized" ] || return 0
+  [ -e "$normalized" ] || return 0
+  [ -x "$normalized" ] || return 0
+
+  normalized="$(readlink -f "$normalized")"
+
+  case "$normalized" in
+    "$WRAPPER_DIR"/*|/usr/bin/clang|/usr/local/bin/clang)
+      return 0
+      ;;
+    "$WORKSPACE_DIR"/*)
+      printf '%s\n' "$normalized"
+      ;;
+  esac
+}
+
+add_candidate() {
+  local candidate="$1"
+  local source_priority="$2"
+  local normalized=""
+  local family_weight=9
+  local version_tag=""
+
+  normalized="$(normalize_clang_candidate "$candidate")"
+  [ -n "$normalized" ] || return 0
+
+  version_tag="$(basename "$(dirname "$(dirname "$normalized")")")"
+  case "$version_tag" in
+    clang-r*)
+      family_weight=0
+      ;;
+    clang-*)
+      family_weight=1
+      ;;
+  esac
+
+  if [ -n "${CANDIDATE_PRIORITY[$normalized]:-}" ]; then
+    if [ "$source_priority" -gt "${CANDIDATE_PRIORITY[$normalized]}" ]; then
+      return 0
+    fi
+  fi
+
+  CANDIDATE_PRIORITY["$normalized"]="$source_priority"
+  CANDIDATE_FAMILY["$normalized"]="$family_weight"
+  CANDIDATE_VERSION["$normalized"]="$version_tag"
+}
+
+discover_candidates_from_build_config() {
+  local build_config_rel="$1"
+  local build_config_path="$WORKSPACE_DIR/$build_config_rel"
+  local raw_candidate
+
+  if [ ! -f "$build_config_path" ]; then
+    echo "Build config not found in workspace: $build_config_path" >&2
     return 1
   fi
 
-  if ! command -v ccache >/dev/null 2>&1; then
-    echo "ccache is required but not installed. Run ./scripts/install-build-tools.sh first." >&2
+  echo "discovering clang from build config: $build_config_rel"
+
+  if mapfile -t build_config_runtime_candidates < <(
+    WORKSPACE_DIR="$WORKSPACE_DIR" BUILD_CONFIG_REL="$build_config_rel" bash <<'EOF'
+set -eo pipefail
+set +u
+cd "$WORKSPACE_DIR"
+export ROOT_DIR="$WORKSPACE_DIR"
+export KERNEL_DIR="$WORKSPACE_DIR/common"
+. "$BUILD_CONFIG_REL" >/dev/null 2>&1 || true
+for var in CLANG_PREBUILT_BIN CLANG_PREBUILT_DIR CLANG_TOOLCHAIN CLANG_PATH; do
+  eval "v=\${$var:-}"
+  [ -n "$v" ] && printf '%s\n' "$v"
+done
+printf '%s\n' "${PATH:-}" | tr ':' '\n'
+EOF
+  ); then
+    for raw_candidate in "${build_config_runtime_candidates[@]}"; do
+      add_candidate "$raw_candidate" 0
+    done
+  else
+    echo "Warning: could not source $build_config_rel for clang discovery; falling back to file-based detection" >&2
+  fi
+
+  if mapfile -t build_config_path_candidates < <(
+    grep -RhoE '([^"[:space:]]*prebuilts[^"[:space:]]*/clang/host/linux-x86/[^"[:space:]]*/bin(/clang)?)' \
+      "$build_config_path" \
+      "$WORKSPACE_DIR"/common/build.config* \
+      "$WORKSPACE_DIR"/build/* 2>/dev/null | sort -u
+  ); then
+    for raw_candidate in "${build_config_path_candidates[@]}"; do
+      case "$raw_candidate" in
+        /*)
+          add_candidate "$raw_candidate" 1
+          ;;
+        *)
+          add_candidate "$WORKSPACE_DIR/$raw_candidate" 1
+          ;;
+      esac
+    done
+  fi
+}
+
+setup_ccache_wrappers() {
+  if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    usage
     return 1
   fi
 
   WORKSPACE_DIR="$1"
+  BUILD_CONFIG_REL="${2:-}"
   WRAPPER_DIR="$HOME/.local/lib/coreshift-ccache-wrappers"
-  CCACHE_BIN="$(command -v ccache)"
+  CCACHE_BIN="$(command -v ccache || true)"
   ORIGINAL_PATH="${PATH:-}"
+
+  if [ -z "$CCACHE_BIN" ]; then
+    echo "ccache is required but not installed. Run ./scripts/install-build-tools.sh first." >&2
+    return 1
+  fi
 
   if [ ! -d "$WORKSPACE_DIR" ]; then
     echo "Workspace not found: $WORKSPACE_DIR" >&2
     return 1
   fi
 
-  mapfile -t clang_candidates < <(
-    find "$WORKSPACE_DIR" -type f -path '*/bin/clang' -perm -111 2>/dev/null | sort -u
-  )
+  declare -gA CANDIDATE_PRIORITY=()
+  declare -gA CANDIDATE_FAMILY=()
+  declare -gA CANDIDATE_VERSION=()
 
-  filtered_candidates=()
-  for candidate in "${clang_candidates[@]}"; do
-    case "$candidate" in
-      "$WRAPPER_DIR"/*|/usr/bin/clang|/usr/local/bin/clang)
-        continue
-        ;;
-      "$WORKSPACE_DIR"/*)
-        filtered_candidates+=("$candidate")
-        ;;
-    esac
+  if [ -n "$BUILD_CONFIG_REL" ]; then
+    discover_candidates_from_build_config "$BUILD_CONFIG_REL"
+  fi
+
+  mapfile -t workspace_scan_candidates < <(
+    find "$WORKSPACE_DIR" -path '*/bin/clang' -exec test -x {} \; -print 2>/dev/null | sort -u
+  )
+  for candidate in "${workspace_scan_candidates[@]}"; do
+    add_candidate "$candidate" 2
   done
+
+  mapfile -t filtered_candidates < <(
+    for candidate in "${!CANDIDATE_PRIORITY[@]}"; do
+      printf '%s\n' "$candidate"
+    done | sort -u
+  )
 
   echo "discovered clang candidates:"
   if [ "${#filtered_candidates[@]}" -gt 0 ]; then
@@ -72,46 +199,37 @@ setup_ccache_wrappers() {
     return 0
   fi
 
-  best_candidate=""
-  best_weight=999
-  for candidate in "${filtered_candidates[@]}"; do
-    weight=50
-    case "$candidate" in
-      */prebuilts/clang/host/linux-x86/*/bin/clang)
-        weight=0
-        ;;
-      */prebuilts-master/clang/host/linux-x86/*/bin/clang)
-        weight=1
-        ;;
-      */common/prebuilts/clang/host/linux-x86/*/bin/clang)
-        weight=2
-        ;;
-      */common/prebuilts-master/clang/host/linux-x86/*/bin/clang)
-        weight=3
-        ;;
-      */*clang-r*/bin/clang)
-        weight=4
-        ;;
-    esac
-    if [ -z "$best_candidate" ] || [ "$weight" -lt "$best_weight" ] || { [ "$weight" -eq "$best_weight" ] && [[ "$candidate" < "$best_candidate" ]]; }; then
-      best_candidate="$candidate"
-      best_weight="$weight"
-    fi
-  done
+  best_candidate_line="$(
+    for candidate in "${filtered_candidates[@]}"; do
+      printf '%s|%s|%s|%s\n' \
+        "${CANDIDATE_PRIORITY[$candidate]}" \
+        "${CANDIDATE_FAMILY[$candidate]}" \
+        "${CANDIDATE_VERSION[$candidate]}" \
+        "$candidate"
+    done | sort -t'|' -k1,1n -k2,2n -k3,3r -k4,4 | head -n 1
+  )"
+
+  best_candidate="${best_candidate_line##*|}"
+  best_dir="$(dirname "$best_candidate")"
+
+  if ! selected_real_clang_version="$("$best_candidate" --version 2>&1)"; then
+    disable_wrappers "ccache wrappers disabled because selected repo clang could not run"
+    printf '%s\n' "$selected_real_clang_version" >&2
+    return 0
+  fi
+
+  echo "selected real clang: $best_candidate"
+  printf '%s\n' "$selected_real_clang_version" | head -n 3
 
   compiler_dirs=()
-  seen_dirs=":"
-  best_dir="$(dirname "$best_candidate")"
-  compiler_dirs+=("$best_dir")
-  seen_dirs="${seen_dirs}${best_dir}:"
-
   for candidate in "${filtered_candidates[@]}"; do
     candidate_dir="$(dirname "$candidate")"
-    if [[ "$seen_dirs" != *":$candidate_dir:"* ]]; then
+    if [ "$candidate_dir" != "$best_dir" ]; then
       compiler_dirs+=("$candidate_dir")
-      seen_dirs="${seen_dirs}${candidate_dir}:"
     fi
   done
+
+  compiler_dirs=("$best_dir" "${compiler_dirs[@]}")
 
   mkdir -p "$WRAPPER_DIR"
   for tool in clang clang++ gcc g++ cc c++; do
@@ -124,14 +242,15 @@ setup_ccache_wrappers() {
   export CORESHIFT_CCACHE_WRAPPERS_ENABLED=1
   export PATH="$CCACHE_WRAPPER_DIR:$ORIGINAL_PATH"
 
-  selected_real_clang_version="$("$best_candidate" --version 2>/dev/null | head -n 3 || true)"
   wrapper_clang_path="$(command -v clang)"
-  wrapper_clang_version="$(clang --version 2>/dev/null | head -n 3 || true)"
+  if ! wrapper_clang_version="$(clang --version 2>&1)"; then
+    disable_wrappers "ccache wrappers disabled because selected repo clang could not run"
+    printf '%s\n' "$wrapper_clang_version" >&2
+    return 0
+  fi
 
-  echo "selected real clang: $best_candidate"
-  printf '%s\n' "$selected_real_clang_version"
   echo "wrapper clang path: $wrapper_clang_path"
-  printf '%s\n' "$wrapper_clang_version"
+  printf '%s\n' "$wrapper_clang_version" | head -n 3
 
   if printf '%s\n' "$wrapper_clang_version" | grep -Fq "Ubuntu clang"; then
     disable_wrappers "ccache wrapper resolved to system Ubuntu clang; wrappers disabled to avoid using the wrong compiler."
@@ -143,7 +262,7 @@ setup_ccache_wrappers() {
   echo "wrapper dir: $CCACHE_WRAPPER_DIR"
   echo "CCACHE_PATH=$CCACHE_PATH"
   command -v clang
-  clang --version || true
+  clang --version | head -n 3 || true
   ccache -s || true
 }
 

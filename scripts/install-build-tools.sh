@@ -42,6 +42,8 @@ if [ "${CORESHIFT_APT_UPGRADE:-0}" = "1" ]; then
   sudo apt-get upgrade -y
 fi
 sudo apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"
+sudo apt-get install -y --no-install-recommends libncurses5 libtinfo5 || true
+sudo apt-get install -y --no-install-recommends libncurses6 libtinfo6 || true
 
 if command -v repo >/dev/null 2>&1; then
   echo "repo already available: $(command -v repo)"
@@ -96,6 +98,9 @@ fi
 if [ ! -f /usr/aarch64-linux-gnu/include/sys/types.h ]; then
   echo "Warning: /usr/aarch64-linux-gnu/include/sys/types.h not found after installation" >&2
 fi
+
+ldconfig -p | grep 'libncurses.so.5' || true
+ldconfig -p | grep 'libtinfo.so.5' || true
 
 echo "Installed host tool versions:"
 git --version
