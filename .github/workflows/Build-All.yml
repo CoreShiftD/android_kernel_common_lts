@@ -48,7 +48,7 @@ jobs:
 
       - name: Add swap
         shell: bash
-        run: ./scripts/add-swap.sh 16
+        run: ./scripts/add-swap.sh 24
 
       - name: Ccache stats before build
         shell: bash
@@ -74,9 +74,13 @@ jobs:
           ccache -s || true
           ccache --show-config || true
 
-      - name: Upload kernel artifacts
+      - name: List AK3 zip artifacts
+        shell: bash
+        run: find "dist/${{ matrix.profile }}" -maxdepth 1 -name '*.zip' -type f -print
+
+      - name: Upload AK3 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-${{ matrix.profile }}-${{ github.run_number }}
-          path: dist/${{ matrix.profile }}/
+          name: ak3-${{ matrix.profile }}-${{ github.run_number }}
+          path: dist/${{ matrix.profile }}/*.zip
           if-no-files-found: error

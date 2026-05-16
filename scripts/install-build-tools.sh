@@ -16,6 +16,7 @@ APT_PACKAGES=(
   rsync
   unzip
   zip
+  binutils
   tar
   zstd
   xz-utils
@@ -74,6 +75,9 @@ required_tools=(
   rsync
   zstd
   ccache
+  zip
+  unzip
+  strings
 )
 
 for tool in "${required_tools[@]}"; do

@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
+Usage: scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--skip-ak3] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
 
 Builds an ACK/GKI kernel for the named profile using the manifest workspace helpers.
 
@@ -37,6 +37,7 @@ ARTIFACT_DIR="$REPO_ROOT/dist/$PROFILE_NAME"
 MODE="auto"
 SKIP_SETUP=0
 CLEAN=0
+SKIP_AK3=0
 DISABLE_DEFCONFIG_CHECK="off"
 DISABLE_KMI_CHECK="off"
 BUILD_ENV=()
@@ -135,6 +136,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --clean)
       CLEAN=1
+      shift
+      ;;
+    --skip-ak3)
+      SKIP_AK3=1
       shift
       ;;
     --disable-defconfig-check)
@@ -454,12 +459,21 @@ fi
 
 "$REPO_ROOT/scripts/collect-artifacts.sh" "$PROFILE_NAME" "$WORKSPACE_DIR" "$ARTIFACT_DIR"
 
+if [ "$SKIP_AK3" -eq 0 ]; then
+  "$REPO_ROOT/scripts/package-ak3.sh" "$PROFILE_NAME" "$WORKSPACE_DIR" "$ARTIFACT_DIR"
+else
+  echo "Skipping AnyKernel3 packaging because --skip-ak3 was requested."
+fi
+
 echo
 echo "Build summary:"
 echo "  profile: $PROFILE_NAME"
 echo "  workspace: $WORKSPACE_DIR"
 echo "  build mode: $SELECTED_MODE"
 echo "  artifacts: $ARTIFACT_DIR"
+if [ -f "$ARTIFACT_DIR/ak3-zip-path.txt" ]; then
+  echo "  ak3 zip: $(cat "$ARTIFACT_DIR/ak3-zip-path.txt")"
+fi
 if [ -n "$BUILD_CONFIG_OVERRIDE_VALUE" ]; then
   echo "  build config override: $BUILD_CONFIG_OVERRIDE_VALUE"
 fi

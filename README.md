@@ -85,11 +85,12 @@ This entrypoint will:
 5. Select `google_build_sh` automatically when available, with `kleaf` as an explicit mode or auto fallback when `build/build.sh` is unavailable and the profile defines `bazel_target`.
 6. Generate `common/private.fragment` from the fixed CoreShift layering model.
 7. Collect common build artifacts into `dist/<profile>/`.
+8. Package a flashable AnyKernel3 zip into `dist/<profile>/` unless `--skip-ak3` is used.
 
 Usage:
 
 ```bash
-scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
+scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--skip-ak3] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
 ```
 
 Local build environment passthrough:
@@ -251,7 +252,25 @@ In GitHub Actions, set `CORESHIFT_CCACHE_DEBUG=1` in the workflow environment if
 
 Scope:
 
-This produces ACK/GKI kernel build artifacts. Device-specific `boot`, `vendor_boot`, or AnyKernel-style packaging is separate and requires device-specific configuration.
+This produces ACK/GKI kernel build artifacts and a local AnyKernel3 flashable zip by default. Device-specific `vendor_boot` or other packaging beyond the included AnyKernel3 template is still separate and may require device-specific configuration.
+
+### AnyKernel3 packaging
+
+Builds now produce a flashable AnyKernel3 zip by default using `DikyVinus/AnyKernel3`.
+
+- AK3 source: `https://github.com/DikyVinus/AnyKernel3`
+- Output format: `dist/<profile>/<kernel_version>-CoreShift.zip`
+- Zip contents include `Image`, `ikconfig.txt`, and the AnyKernel3 scripts/tools
+- `ikconfig.txt` is copied from the final full build `.config`
+- Raw collected files may still exist locally under `dist/<profile>/` after a local build
+- GitHub Actions uploads only the AK3 zip artifact, not the full `dist/<profile>/` directory
+- Future suffixes can append `KSU`, `SUSFS`, or `BBG` later via `CORESHIFT_AK3_SUFFIXES`, but nothing is added automatically yet
+
+Local users can skip packaging if they only want the raw collected outputs:
+
+```bash
+./scripts/build-kernel.sh android12-5.4-lts --skip-ak3
+```
 
 ### Private fragment model
 
@@ -294,7 +313,7 @@ The repo includes a beginner-friendly template workflow at `.github/workflows/Bu
 - `disable_defconfig_check`
 - `disable_kmi_check`
 
-It checks out the current repository, optionally writes a repo-root `private.fragment`, calls `./scripts/build-kernel.sh`, and uploads only `dist/<profile>/`.
+It checks out the current repository, optionally writes a repo-root `private.fragment`, calls `./scripts/build-kernel.sh`, and uploads only the generated AnyKernel3 zip from `dist/<profile>/*.zip`.
 
 The GitHub Actions workflows install required host/build tools automatically before invoking `scripts/build-kernel.sh`.
 
@@ -302,7 +321,7 @@ They install the latest versions available from the configured Ubuntu runner apt
 
 The workflows also restore and save `~/.cache/ccache` with `actions/cache`, run `./scripts/setup-ccache.sh`, and print `ccache -s` plus `ccache --show-config` before and after each build.
 
-They also add a 16GB swap file before kernel compilation.
+They also add a 24GB swap file before kernel compilation.
 
 The default workflow intentionally does not expose `repository`, `ref`, `mode`, or `extra_args`. Advanced users can edit `Build.yml` directly or run `scripts/build-kernel.sh` manually.
 
