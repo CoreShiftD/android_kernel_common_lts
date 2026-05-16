@@ -280,7 +280,13 @@ CoreShift now has a JSON-driven build variant foundation:
 - `configs/variants.json` defines what a variant means
 - `configs/profile-variants.json` defines which variants are allowed for each profile
 
-Only `vanilla` is enabled initially. Non-vanilla definitions are present for future work, but KernelSU, SUSFS, and BBG patching are not implemented in this commit and are not enabled for any profile yet.
+Variants are feature combinations, not separate hardcoded flows:
+
+- `vanilla` means baseline CoreShift only, with no optional feature patches
+- `bbg` is independent and can later be built without KernelSU or SUSFS
+- `susfs` requires `ksu`, so there is no `susfs`-only variant
+
+Only `vanilla` is enabled initially in `configs/profile-variants.json`. Non-vanilla definitions are present for future work, but KernelSU, SUSFS, and BBG patching are not implemented in this commit and are not enabled for any profile yet.
 
 Future profile mappings can later grow from:
 
@@ -292,7 +298,19 @@ Future profile mappings can later grow from:
 }
 ```
 
-to combinations such as `ksu`, `ksu-susfs`, `ksu-bbg`, or `ksu-susfs-bbg` once the corresponding patch flows exist.
+to:
+
+```yaml
+android12-5.10-lts:
+  - vanilla
+  - bbg
+  - ksu
+  - ksu-bbg
+  - ksu-susfs
+  - ksu-susfs-bbg
+```
+
+once the corresponding patch flows exist.
 
 Current workflow split:
 
@@ -303,7 +321,10 @@ Current workflow split:
 AK3 zip suffixes are driven by the resolved variant:
 
 - `vanilla` -> `<kernel_version>-CoreShift.zip`
+- `bbg` -> `<kernel_version>-CoreShift-BBG.zip`
 - `ksu` -> `<kernel_version>-CoreShift-KSU.zip`
+- `ksu-bbg` -> `<kernel_version>-CoreShift-KSU-BBG.zip`
+- `ksu-susfs` -> `<kernel_version>-CoreShift-KSU-SUSFS.zip`
 - `ksu-susfs-bbg` -> `<kernel_version>-CoreShift-KSU-SUSFS-BBG.zip`
 
 ### Private fragment model

@@ -13,6 +13,12 @@ from pathlib import Path
 VARIANT_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 FEATURE_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 AK3_SUFFIX_RE = re.compile(r"^[A-Z0-9]+(?:-[A-Z0-9]+)*$")
+FEATURE_SUFFIXES = {
+    "ksu": "KSU",
+    "susfs": "SUSFS",
+    "bbg": "BBG",
+}
+FEATURE_DISPLAY_ORDER = tuple(FEATURE_SUFFIXES)
 
 
 def fail(message: str) -> "None":
@@ -71,9 +77,24 @@ def load_variants(path: Path) -> dict[str, dict[str, object]]:
         features = definition.get("features")
         if not isinstance(features, list):
             fail(f"{path}: variant {variant_name!r} field 'features' must be a list")
+        seen_features: set[str] = set()
         for feature in features:
             if not isinstance(feature, str) or not FEATURE_RE.fullmatch(feature):
                 fail(f"{path}: variant {variant_name!r} has invalid feature {feature!r}")
+            if feature not in FEATURE_SUFFIXES:
+                fail(f"{path}: variant {variant_name!r} has unknown feature {feature!r}")
+            if feature in seen_features:
+                fail(f"{path}: variant {variant_name!r} repeats feature {feature!r}")
+            seen_features.add(feature)
+
+        ordered_features = [feature for feature in FEATURE_DISPLAY_ORDER if feature in seen_features]
+        if features != ordered_features:
+            fail(
+                f"{path}: variant {variant_name!r} features must follow display order "
+                f"{', '.join(FEATURE_DISPLAY_ORDER)}"
+            )
+        if "susfs" in seen_features and "ksu" not in seen_features:
+            fail(f"{path}: variant {variant_name!r} cannot enable 'susfs' without 'ksu'")
 
         ak3_suffixes = definition.get("ak3_suffixes")
         if not isinstance(ak3_suffixes, list):
@@ -81,6 +102,13 @@ def load_variants(path: Path) -> dict[str, dict[str, object]]:
         for suffix in ak3_suffixes:
             if not isinstance(suffix, str) or not AK3_SUFFIX_RE.fullmatch(suffix):
                 fail(f"{path}: variant {variant_name!r} has invalid AK3 suffix {suffix!r}")
+
+        expected_suffixes = [FEATURE_SUFFIXES[feature] for feature in features]
+        if ak3_suffixes != expected_suffixes:
+            fail(
+                f"{path}: variant {variant_name!r} ak3_suffixes must match feature display order "
+                f"{expected_suffixes!r}"
+            )
 
         variants[variant_name] = {
             "description": description,
@@ -93,6 +121,8 @@ def load_variants(path: Path) -> dict[str, dict[str, object]]:
         fail(f"{path}: variant 'vanilla' must exist")
     if vanilla["features"] != [] or vanilla["ak3_suffixes"] != []:
         fail(f"{path}: variant 'vanilla' must have empty features and empty ak3_suffixes")
+    if "bbg" not in variants:
+        fail(f"{path}: variant 'bbg' must exist")
 
     return variants
 
