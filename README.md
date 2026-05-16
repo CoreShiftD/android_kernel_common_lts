@@ -203,6 +203,8 @@ Examples:
 
 ### Ccache notes
 
+CoreShift uses stock Ubuntu `ccache` by default. It does not download WildKernels or any other custom ccache binary.
+
 `ccache` hits depend on:
 
 - The same profile
@@ -218,6 +220,10 @@ For `google_build_sh`, CoreShift now uses wrapper symlinks so `clang`, `clang++`
 
 The wrapper must resolve to repo/AOSP clang, not Ubuntu clang. If no repo clang is found, CoreShift disables wrappers and continues without ccache interception.
 
+CoreShift also enables broader but still reasonable kernel-build cache settings by default. In particular, `CCACHE_IGNOREOPTIONS=--sysroot*` helps avoid sysroot path churn causing misses, but you can override it with `--build-env`.
+
+Per-run stats are zeroed before the build by default so the post-build stats are easier to read.
+
 If `ccache -s` shows only cache size information and no cacheable calls, the compiler is still not going through `ccache`. In that case, inspect:
 
 ```bash
@@ -229,6 +235,15 @@ ccache -s
 ```
 
 If those still show zero cacheable calls across repeated runs, Google `build.sh` may be forcing the real Clang path ahead of the wrapper path.
+
+You can enable ccache debug logging with:
+
+```bash
+CORESHIFT_CCACHE_DEBUG=1 ./scripts/setup-ccache.sh
+./scripts/build-kernel.sh android13-5.15-lts --build-env CORESHIFT_CCACHE_DEBUG=1
+```
+
+In GitHub Actions, set `CORESHIFT_CCACHE_DEBUG=1` in the workflow environment if you want `setup-ccache.sh` to persist a log path before the build.
 
 Scope:
 

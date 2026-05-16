@@ -273,12 +273,22 @@ fi
 
 for passthrough_key in \
   CCACHE_DIR \
+  CCACHE_MAXSIZE \
   CCACHE_BASEDIR \
   CCACHE_NOHASHDIR \
   CCACHE_COMPILERCHECK \
+  CCACHE_IGNOREOPTIONS \
+  CCACHE_COMPRESSION \
+  CCACHE_COMPRESSION_LEVEL \
+  CCACHE_DIRECT \
+  CCACHE_FILE_CLONE \
+  CCACHE_INODE_CACHE \
+  CCACHE_UMASK \
   CCACHE_SLOPPINESS \
+  CCACHE_LOGFILE \
   CCACHE_WRAPPER_DIR \
   CCACHE_PATH \
+  CORESHIFT_CCACHE_DEBUG \
   USE_CCACHE
 do
   append_passthrough_build_env_if_unset "$passthrough_key"
@@ -411,6 +421,10 @@ fi
 BUILD_CONFIG_OVERRIDE_VALUE=""
 if [ "$SELECTED_MODE" = "google_build_sh" ] && [ -f "$WORKSPACE_DIR/common/build.config.coreshift.gki.aarch64" ]; then
   BUILD_CONFIG_OVERRIDE_VALUE="common/build.config.coreshift.gki.aarch64"
+fi
+
+if has_build_env_key "CORESHIFT_CCACHE_DEBUG" && ! has_build_env_key "CCACHE_LOGFILE"; then
+  add_default_build_env "CCACHE_LOGFILE" "$WORKSPACE_DIR/ccache.log"
 fi
 
 run_cmd=(

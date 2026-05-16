@@ -127,6 +127,15 @@ case "$BUILD_MODE" in
       post_build_ccache_stats="$(ccache -s 2>/dev/null || true)"
       printf '%s\n' "$post_build_ccache_stats"
       ccache_warn_if_no_cacheable_calls "$post_build_ccache_stats"
+      if [ -n "${CCACHE_LOGFILE:-}" ] && [ -f "$CCACHE_LOGFILE" ]; then
+        echo "CCACHE_LOGFILE=$CCACHE_LOGFILE"
+        if [ "${CORESHIFT_CCACHE_DEBUG:-0}" = "1" ]; then
+          echo "ccache log (head):"
+          head -n 5 "$CCACHE_LOGFILE" || true
+          echo "ccache log (tail):"
+          tail -n 5 "$CCACHE_LOGFILE" || true
+        fi
+      fi
     )
     ;;
   kleaf)
