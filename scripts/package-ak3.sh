@@ -153,7 +153,10 @@ suffixes=("CoreShift")
 if [ -n "${CORESHIFT_AK3_SUFFIXES:-}" ]; then
   IFS=',' read -r -a extra_suffixes <<< "${CORESHIFT_AK3_SUFFIXES}"
   for suffix in "${extra_suffixes[@]}"; do
-    suffix="$(printf '%s' "$suffix" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    suffix="$(
+      printf '%s' "$suffix" \
+        | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/[^A-Za-z0-9._+-]/-/g; s/--*/-/g; s/^-//; s/-$//'
+    )"
     [ -n "$suffix" ] || continue
     suffixes+=("$suffix")
   done

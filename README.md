@@ -90,7 +90,7 @@ This entrypoint will:
 Usage:
 
 ```bash
-scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--skip-ak3] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
+scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--variant VARIANT] [--skip-setup] [--clean] [--skip-ak3] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
 ```
 
 Local build environment passthrough:
@@ -272,6 +272,40 @@ Local users can skip packaging if they only want the raw collected outputs:
 ./scripts/build-kernel.sh android12-5.4-lts --skip-ak3
 ```
 
+### Build variants
+
+CoreShift now has a JSON-driven build variant foundation:
+
+- `profiles/*.json` defines kernel branches and build backends
+- `configs/variants.json` defines what a variant means
+- `configs/profile-variants.json` defines which variants are allowed for each profile
+
+Only `vanilla` is enabled initially. Non-vanilla definitions are present for future work, but KernelSU, SUSFS, and BBG patching are not implemented in this commit and are not enabled for any profile yet.
+
+Future profile mappings can later grow from:
+
+```json
+{
+  "profiles": {
+    "android12-5.10-lts": ["vanilla"]
+  }
+}
+```
+
+to combinations such as `ksu`, `ksu-susfs`, `ksu-bbg`, or `ksu-susfs-bbg` once the corresponding patch flows exist.
+
+Current workflow split:
+
+- `Build.yml`: one profile plus one explicitly chosen variant
+- `Build-All.yml`: all profiles, vanilla baseline only
+- `Build-Variants.yml`: JSON-driven allowed profile x variant matrix
+
+AK3 zip suffixes are driven by the resolved variant:
+
+- `vanilla` -> `<kernel_version>-CoreShift.zip`
+- `ksu` -> `<kernel_version>-CoreShift-KSU.zip`
+- `ksu-susfs-bbg` -> `<kernel_version>-CoreShift-KSU-SUSFS-BBG.zip`
+
 ### Private fragment model
 
 CoreShift uses a fixed fragment layer order:
@@ -308,6 +342,7 @@ These are explicit private-build escape hatches. They do not guarantee device sa
 The repo includes a beginner-friendly template workflow at `.github/workflows/Build.yml`. It intentionally exposes only:
 
 - `profile`
+- `variant`
 - `private_fragment`
 - `build_env`
 - `disable_defconfig_check`
@@ -370,7 +405,7 @@ Local CLI behavior remains unchanged unless you explicitly pass:
 
 ### Build-All workflow
 
-The repo also includes `.github/workflows/Build-All.yml`, a no-option matrix workflow that builds every profile in `profiles/*.json` and uploads one artifact per profile.
+The repo also includes `.github/workflows/Build-All.yml`, a no-option matrix workflow that builds every profile in `profiles/*.json` with the `vanilla` baseline variant and uploads one artifact per profile.
 
 It is intended for batch validation, not customization, and can be expensive because it runs many kernel builds. It also disables the defconfig normalization check by default for every matrix build. Per-profile customization belongs in `Build.yml` or direct local use of `scripts/build-kernel.sh`.
 
@@ -381,3 +416,5 @@ Device-specific packaging dependencies remain separate from this host-tool insta
 `sync-kernel-source.yml` stays separate from manifest workspace setup. It mirrors `https://android.googlesource.com/kernel/common` source branches directly and does not use repo manifests.
 
 The old clang release workflow was removed because the repo no longer carries dedicated clang metadata in the current profile schema.
+
+`.github/workflows/Build-Variants.yml` resolves its matrix from `configs/variants.json` plus `configs/profile-variants.json` through `scripts/resolve-build-matrix.py`. It does not hardcode profile x variant combinations in YAML and only builds combinations explicitly allowed by the JSON compatibility map.

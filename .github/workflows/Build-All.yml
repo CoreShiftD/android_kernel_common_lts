@@ -65,6 +65,7 @@ jobs:
           # It is for batch-testing all supported profiles.
           # Per-profile customization belongs in Build.yml or local scripts/build-kernel.sh usage.
           ./scripts/build-kernel.sh "${{ matrix.profile }}" \
+            --variant vanilla \
             --disable-defconfig-check on
 
       - name: Ccache stats after build

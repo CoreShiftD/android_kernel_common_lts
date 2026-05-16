@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--skip-setup] [--clean] [--skip-ak3] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
+Usage: scripts/build-kernel.sh <profile-name> [--workspace DIR] [--mode auto|google_build_sh|kleaf] [--variant VARIANT] [--skip-setup] [--clean] [--skip-ak3] [--disable-defconfig-check on|off] [--disable-kmi-check on|off] [--build-env KEY=VALUE] [-- EXTRA_BUILD_ARGS...]
 
 Builds an ACK/GKI kernel for the named profile using the manifest workspace helpers.
 
@@ -35,6 +35,7 @@ PROFILE_JSON="$REPO_ROOT/profiles/$PROFILE_NAME.json"
 WORKSPACE_DIR="$REPO_ROOT/.work/$PROFILE_NAME"
 ARTIFACT_DIR="$REPO_ROOT/dist/$PROFILE_NAME"
 MODE="auto"
+VARIANT="vanilla"
 SKIP_SETUP=0
 CLEAN=0
 SKIP_AK3=0
@@ -128,6 +129,14 @@ while [ "$#" -gt 0 ]; do
         exit 1
       fi
       MODE="$2"
+      shift 2
+      ;;
+    --variant)
+      if [ "$#" -lt 2 ]; then
+        echo "Missing value for --variant" >&2
+        exit 1
+      fi
+      VARIANT="$2"
       shift 2
       ;;
     --skip-setup)
@@ -237,6 +246,57 @@ command -v python3 >/dev/null 2>&1 || {
 }
 
 python3 "$REPO_ROOT/scripts/validate-profiles.py"
+
+matrix_json="$(
+  python3 "$REPO_ROOT/scripts/resolve-build-matrix.py" \
+    --profile "$PROFILE_NAME" \
+    --variant "$VARIANT"
+)"
+mapfile -t variant_fields < <(
+  python3 - "$matrix_json" <<'PY'
+import json
+import sys
+
+data = json.loads(sys.argv[1])
+entries = data.get("include", [])
+if len(entries) != 1:
+    raise SystemExit("expected exactly one resolved profile/variant entry")
+entry = entries[0]
+print(entry["variant"])
+print(entry["features"])
+print(entry["ak3_suffixes"])
+PY
+)
+
+RESOLVED_VARIANT="${variant_fields[0]:-}"
+CORESHIFT_FEATURES_VALUE="${variant_fields[1]:-}"
+CORESHIFT_AK3_SUFFIXES_VALUE="${variant_fields[2]:-}"
+
+export CORESHIFT_VARIANT="$RESOLVED_VARIANT"
+export CORESHIFT_FEATURES="$CORESHIFT_FEATURES_VALUE"
+export CORESHIFT_AK3_SUFFIXES="$CORESHIFT_AK3_SUFFIXES_VALUE"
+
+if [ "$RESOLVED_VARIANT" != "vanilla" ] && [ -n "$CORESHIFT_FEATURES_VALUE" ]; then
+  echo "Variant $RESOLVED_VARIANT is defined, but feature patching is not implemented yet." >&2
+  exit 1
+fi
+
+for reserved_variant_key in CORESHIFT_VARIANT CORESHIFT_FEATURES CORESHIFT_AK3_SUFFIXES; do
+  if has_build_env_key "$reserved_variant_key"; then
+    echo "--build-env must not set reserved variant key: $reserved_variant_key" >&2
+    exit 1
+  fi
+done
+
+BUILD_ENV+=("CORESHIFT_VARIANT=$RESOLVED_VARIANT")
+BUILD_ENV_KEYS+=("CORESHIFT_VARIANT")
+DEFAULT_BUILD_ENV_KEYS+=("CORESHIFT_VARIANT")
+BUILD_ENV+=("CORESHIFT_FEATURES=$CORESHIFT_FEATURES_VALUE")
+BUILD_ENV_KEYS+=("CORESHIFT_FEATURES")
+DEFAULT_BUILD_ENV_KEYS+=("CORESHIFT_FEATURES")
+BUILD_ENV+=("CORESHIFT_AK3_SUFFIXES=$CORESHIFT_AK3_SUFFIXES_VALUE")
+BUILD_ENV_KEYS+=("CORESHIFT_AK3_SUFFIXES")
+DEFAULT_BUILD_ENV_KEYS+=("CORESHIFT_AK3_SUFFIXES")
 
 case "$PROFILE_NAME" in
   android*-5.4-lts)
@@ -468,6 +528,7 @@ fi
 echo
 echo "Build summary:"
 echo "  profile: $PROFILE_NAME"
+echo "  variant: $RESOLVED_VARIANT"
 echo "  workspace: $WORKSPACE_DIR"
 echo "  build mode: $SELECTED_MODE"
 echo "  artifacts: $ARTIFACT_DIR"

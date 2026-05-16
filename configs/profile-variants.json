@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "android11-5.4-lts": ["vanilla"],
+    "android12-5.4-lts": ["vanilla"],
+    "android12-5.10-lts": ["vanilla"],
+    "android13-5.10-lts": ["vanilla"],
+    "android13-5.15-lts": ["vanilla"],
+    "android14-5.15-lts": ["vanilla"],
+    "android14-6.1-lts": ["vanilla"],
+    "android15-6.6-lts": ["vanilla"],
+    "android16-6.12-lts": ["vanilla"]
+  }
+}
