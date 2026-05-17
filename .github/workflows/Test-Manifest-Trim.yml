@@ -1,0 +1,107 @@
+name: Test manifest trim
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Profile to test, or all profiles."
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - android11-5.4-lts
+          - android12-5.4-lts
+          - android12-5.10-lts
+          - android13-5.10-lts
+          - android13-5.15-lts
+          - android14-5.15-lts
+          - android14-6.1-lts
+          - android15-6.6-lts
+          - android16-6.12-lts
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Resolve manifest test matrix
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          matrix_json="$(python3 - <<'PY' "${{ inputs.profile }}"
+          import json
+          import sys
+
+          selected = sys.argv[1]
+          profiles = [
+              "android11-5.4-lts",
+              "android12-5.4-lts",
+              "android12-5.10-lts",
+              "android13-5.10-lts",
+              "android13-5.15-lts",
+              "android14-5.15-lts",
+              "android14-6.1-lts",
+              "android15-6.6-lts",
+              "android16-6.12-lts",
+          ]
+
+          include = [{"profile": profile} for profile in profiles] if selected == "all" else [{"profile": selected}]
+          print(json.dumps({"include": include}, separators=(",", ":")))
+          PY
+          )"
+
+          echo "matrix=$matrix_json" >> "$GITHUB_OUTPUT"
+
+  test-manifest-trim:
+    needs: resolve-matrix
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJson(needs.resolve-matrix.outputs.matrix) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install build tools
+        shell: bash
+        run: ./scripts/install-build-tools.sh
+
+      - name: Run manifest workspace setup
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/setup-manifest-workspace.sh "profiles/${{ matrix.profile }}.json" ".work/${{ matrix.profile }}"
+
+      - name: Upload manifest trim report
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-trim-report-${{ matrix.profile }}-${{ github.run_number }}
+          path: .work/${{ matrix.profile }}/manifest-trim-report.txt
+          if-no-files-found: error
+
+      - name: Upload generated overlay
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-overlay-${{ matrix.profile }}-${{ github.run_number }}
+          path: .work/${{ matrix.profile }}/.repo/local_manifests/coreshift-overlay.xml
+          if-no-files-found: error

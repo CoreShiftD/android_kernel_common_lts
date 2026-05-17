@@ -53,6 +53,7 @@ USER_LTO_VALUE=""
 EXTRA_ARGS=()
 PROFILE_LTO="full"
 EFFECTIVE_LTO=""
+UNSUPPORTED_MANIFEST_TRIM_KEY="CORESHIFT_MANIFEST""_TRIM"
 
 has_build_env_key() {
   local wanted="$1"
@@ -100,6 +101,13 @@ get_build_env_value() {
     fi
   done
   printf '%s\n' "$value"
+}
+
+export_build_env_key_if_set() {
+  local key="$1"
+  if has_build_env_key "$key"; then
+    export "$key=$(get_build_env_value "$key")"
+  fi
 }
 
 print_key_section() {
@@ -187,6 +195,10 @@ while [ "$#" -gt 0 ]; do
       build_env_value="${2#*=}"
       if ! [[ "$build_env_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
         echo "Invalid --build-env key: $build_env_key" >&2
+        exit 1
+      fi
+      if [ "$build_env_key" = "$UNSUPPORTED_MANIFEST_TRIM_KEY" ]; then
+        echo "Manifest trim is controlled by profile JSON only. Edit manifest_trim in $PROFILE_JSON instead of passing a trim build-env override." >&2
         exit 1
       fi
       BUILD_ENV+=("$2")
@@ -376,6 +388,15 @@ if [ "$CLEAN" -eq 1 ]; then
 fi
 
 if [ "$SKIP_SETUP" -eq 0 ]; then
+  for setup_env_key in \
+    CORESHIFT_REPO_JOBS \
+    CORESHIFT_REPO_DEPTH \
+    CORESHIFT_REPO_PARTIAL_CLONE \
+    CORESHIFT_REPO_CLONE_FILTER \
+    CORESHIFT_REPO_NO_VERIFY
+  do
+    export_build_env_key_if_set "$setup_env_key"
+  done
   "$REPO_ROOT/scripts/setup-manifest-workspace.sh" "$PROFILE_JSON" "$WORKSPACE_DIR"
 elif [ ! -d "$WORKSPACE_DIR" ]; then
   echo "Workspace not found with --skip-setup: $WORKSPACE_DIR" >&2
@@ -413,7 +434,6 @@ for passthrough_key in \
   CORESHIFT_REPO_DEPTH \
   CORESHIFT_REPO_PARTIAL_CLONE \
   CORESHIFT_REPO_CLONE_FILTER \
-  CORESHIFT_MANIFEST_TRIM \
   CORESHIFT_REPO_NO_VERIFY \
   CORESHIFT_UPDATE_REPO_LAUNCHER \
   BBG_REPO \

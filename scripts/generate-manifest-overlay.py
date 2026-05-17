@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -72,6 +71,7 @@ KLEAF_CONTAINS = (
     "build",
     "tools",
 )
+VALID_MANIFEST_TRIM_VALUES = {"safe", "aggressive", "none"}
 
 
 @dataclass(frozen=True)
@@ -92,6 +92,33 @@ def load_profile(path: Path) -> dict[str, object]:
     if not isinstance(data, dict):
         fail(f"{path}: top-level JSON value must be an object")
     return data
+
+
+def get_manifest_trim_mode(profile: dict[str, object], override: str | None) -> str:
+    if override is not None:
+        if override not in VALID_MANIFEST_TRIM_VALUES:
+            allowed = ", ".join(sorted(VALID_MANIFEST_TRIM_VALUES))
+            fail(f"override trim mode must be one of: {allowed}")
+        return override
+    mode = profile.get("manifest_trim", "safe")
+    if mode not in VALID_MANIFEST_TRIM_VALUES:
+        allowed = ", ".join(sorted(VALID_MANIFEST_TRIM_VALUES))
+        fail(f"profile field 'manifest_trim' must be one of: {allowed}")
+    return str(mode)
+
+
+def get_string_list(profile: dict[str, object], field: str) -> list[str]:
+    value = profile.get(field)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        fail(f"profile field {field!r} must be a list of non-empty strings")
+    result: list[str] = []
+    for entry in value:
+        if not isinstance(entry, str) or not entry:
+            fail(f"profile field {field!r} must contain only non-empty strings")
+        result.append(entry)
+    return result
 
 
 def load_static_overlay(path: Path | None) -> list[str]:
@@ -186,18 +213,34 @@ def keep_reason(project: Project, is_kleaf: bool) -> str | None:
     return match_contains_reason(project, KLEAF_CONTAINS)
 
 
+def keep_reason_with_profile_patterns(
+    project: Project,
+    is_kleaf: bool,
+    profile_keep_patterns: list[str],
+) -> str | None:
+    reason = keep_reason(project, is_kleaf)
+    if reason:
+        return reason
+    profile_reason = match_pattern_reason(project, tuple(profile_keep_patterns))
+    if profile_reason:
+        return f"{profile_reason} (profile keep pattern)"
+    return None
+
+
 def build_overlay(
     projects: list[Project],
     profile: dict[str, object],
     mode: str,
-    keep_manifest_common: bool,
     safe_mode_removals: set[str],
+    profile_keep_patterns: list[str],
+    profile_drop_projects: list[str],
 ) -> tuple[list[str], list[tuple[Project, str]], list[Project]]:
     bazel_target = profile.get("bazel_target")
     is_kleaf = isinstance(bazel_target, str) and bool(bazel_target)
     removed: list[str] = []
     kept: list[tuple[Project, str]] = []
     removed_projects: list[Project] = []
+    forced_drops = set(profile_drop_projects)
 
     for project in projects:
         if mode == "safe":
@@ -209,19 +252,20 @@ def build_overlay(
             continue
 
         if project.name == "kernel/common":
-            if mode == "none" and keep_manifest_common:
-                kept.append((project, "kept by CORESHIFT_KEEP_MANIFEST_COMMON=1"))
-            else:
-                removed.append(project.name)
-                removed_projects.append(project)
+            removed.append(project.name)
+            removed_projects.append(project)
             continue
 
         if mode == "none":
-            kept.append((project, "trim mode none"))
+            if project.name in forced_drops:
+                removed.append(project.name)
+                removed_projects.append(project)
+            else:
+                kept.append((project, "trim mode none"))
             continue
 
-        reason = keep_reason(project, is_kleaf)
-        if reason:
+        reason = keep_reason_with_profile_patterns(project, is_kleaf, profile_keep_patterns)
+        if reason and project.name not in forced_drops:
             kept.append((project, reason))
         else:
             removed.append(project.name)
@@ -243,17 +287,21 @@ def write_report(
     report_path: Path,
     profile: dict[str, object],
     mode: str,
+    overlay_manifest: str,
     projects: list[Project],
     kept: list[tuple[Project, str]],
     removed_projects: list[Project],
+    profile_keep_patterns: list[str],
+    profile_drop_projects: list[str],
 ) -> None:
     lines = [
         f"profile name: {profile.get('name', '')}",
         f"manifest branch: {profile.get('manifest_branch', '')}",
-        f"build_config: {profile.get('build_config', '')}",
-        f"bazel_target: {profile.get('bazel_target', '')}",
         f"trim mode: {mode}",
+        f"overlay_manifest: {overlay_manifest}",
         f"total projects: {len(projects)}",
+        f"profile keep patterns: {', '.join(profile_keep_patterns) if profile_keep_patterns else '(none)'}",
+        f"profile drop projects: {', '.join(profile_drop_projects) if profile_drop_projects else '(none)'}",
         "",
         "kept projects with reason:",
     ]
@@ -270,7 +318,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--profile-json", required=True)
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--mode", required=True, choices=("safe", "aggressive", "none"))
+    parser.add_argument("--mode", choices=("safe", "aggressive", "none"))
     parser.add_argument("--static-overlay")
     return parser.parse_args(argv)
 
@@ -281,29 +329,35 @@ def main(argv: list[str]) -> int:
     workspace = Path(args.workspace).resolve()
     output = Path(args.output).resolve()
     report_path = workspace / "manifest-trim-report.txt"
-    keep_manifest_common = os.environ.get("CORESHIFT_KEEP_MANIFEST_COMMON") == "1"
     static_overlay = Path(args.static_overlay).resolve() if args.static_overlay else None
     safe_mode_removals = set(load_static_overlay(static_overlay))
-    if args.mode == "safe" and not safe_mode_removals:
-        safe_mode_removals = {"kernel/common"}
 
     profile = load_profile(profile_path)
+    mode = get_manifest_trim_mode(profile, args.mode)
+    profile_keep_patterns = get_string_list(profile, "manifest_keep_patterns")
+    profile_drop_projects = get_string_list(profile, "manifest_drop_projects")
+    if mode == "safe" and not safe_mode_removals:
+        safe_mode_removals = {"kernel/common"}
     projects = run_repo_manifest(workspace)
     removed, kept, removed_projects = build_overlay(
         projects=projects,
         profile=profile,
-        mode=args.mode,
-        keep_manifest_common=keep_manifest_common,
+        mode=mode,
         safe_mode_removals=safe_mode_removals,
+        profile_keep_patterns=profile_keep_patterns,
+        profile_drop_projects=profile_drop_projects,
     )
     write_overlay(output, removed)
     write_report(
         report_path=report_path,
         profile=profile,
-        mode=args.mode,
+        mode=mode,
+        overlay_manifest=str(profile.get("overlay_manifest", "")),
         projects=projects,
         kept=kept,
         removed_projects=removed_projects,
+        profile_keep_patterns=profile_keep_patterns,
+        profile_drop_projects=profile_drop_projects,
     )
     return 0
 

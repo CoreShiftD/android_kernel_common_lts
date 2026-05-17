@@ -7,7 +7,7 @@ It is intended for repeatable ACK/GKI kernel builds and CI templates, not ROM bu
 ## Features
 
 - Manifest-based ACK workspace setup
-- Profile-specific manifest overlays and aggressive trim mode
+- Profile-specific manifest overlays
 - Profile-driven branch and build backend selection
 - `google_build_sh` and Kleaf support
 - Private Kconfig fragment support
@@ -42,6 +42,7 @@ cp configs/fragments/private.fragment.example private.fragment
 - `Build.yml`: single selected profile and variant
 - `Build-All.yml`: vanilla-only matrix across supported profiles
 - `Build-Variants.yml`: JSON-resolved allowed profile/variant matrix
+- `Test-Manifest-Trim.yml`: manifest setup and trim validation only
 
 ## Supported profiles
 

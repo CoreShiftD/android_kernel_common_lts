@@ -36,7 +36,6 @@ CORESHIFT_REPO_JOBS="${CORESHIFT_REPO_JOBS:-4}"
 CORESHIFT_REPO_DEPTH="${CORESHIFT_REPO_DEPTH:-1}"
 CORESHIFT_REPO_PARTIAL_CLONE="${CORESHIFT_REPO_PARTIAL_CLONE:-1}"
 CORESHIFT_REPO_CLONE_FILTER="${CORESHIFT_REPO_CLONE_FILTER:-blob:none}"
-CORESHIFT_MANIFEST_TRIM="${CORESHIFT_MANIFEST_TRIM:-aggressive}"
 CORESHIFT_REPO_NO_VERIFY="${CORESHIFT_REPO_NO_VERIFY:-0}"
 
 if [ ! -f "$PROFILE_JSON" ]; then
@@ -72,6 +71,13 @@ else:
     raise SystemExit(
         f"{profile_path}: profile field 'overlay_manifest' must be a non-empty string when present"
     )
+
+manifest_trim = profile.get("manifest_trim", "safe")
+if manifest_trim not in {"safe", "aggressive", "none"}:
+    raise SystemExit(
+        f"{profile_path}: profile field 'manifest_trim' must be one of: safe, aggressive, none"
+    )
+print(f"MANIFEST_TRIM={shlex.quote(manifest_trim)}")
 PY
 )"
 
@@ -118,15 +124,6 @@ case "$CORESHIFT_REPO_PARTIAL_CLONE" in
   *)
     repo_partial_clone_enabled=0
     repo_partial_clone_label="off"
-    ;;
-esac
-
-case "$CORESHIFT_MANIFEST_TRIM" in
-  aggressive|safe|none)
-    ;;
-  *)
-    echo "Unsupported value for CORESHIFT_MANIFEST_TRIM: $CORESHIFT_MANIFEST_TRIM" >&2
-    exit 1
     ;;
 esac
 
@@ -207,11 +204,10 @@ echo "  workspace path: $WORKSPACE_DIR"
     --profile-json "$PROFILE_JSON" \
     --workspace "$WORKSPACE_DIR" \
     --output "$OVERLAY_OUTPUT" \
-    --mode "$CORESHIFT_MANIFEST_TRIM" \
     --static-overlay "$SELECTED_OVERLAY_SOURCE"
 
   echo "overlay manifest: $OVERLAY_OUTPUT"
-  echo "manifest trim mode: $CORESHIFT_MANIFEST_TRIM"
+  echo "manifest trim mode: $MANIFEST_TRIM"
   echo "manifest trim report: $MANIFEST_TRIM_REPORT"
 
   if [ ! -f "$OVERLAY_OUTPUT" ]; then

@@ -29,10 +29,22 @@ REQUIRED_FIELDS = (
 )
 
 VALID_LTO_VALUES = ("full", "thin", "none", "default")
+VALID_MANIFEST_TRIM_VALUES = ("safe", "aggressive", "none")
 
 
 def fail(message: str) -> None:
     raise SystemExit(message)
+
+
+def validate_string_list(path: Path, data: dict[str, object], field: str) -> None:
+    value = data.get(field)
+    if value is None:
+        return
+    if not isinstance(value, list):
+        fail(f"{path}: field {field!r} must be a list of non-empty strings when present")
+    for entry in value:
+        if not isinstance(entry, str) or not entry:
+            fail(f"{path}: field {field!r} must contain only non-empty strings")
 
 
 def validate_profile(path: Path, repo_root: Path) -> str:
@@ -61,6 +73,14 @@ def validate_profile(path: Path, repo_root: Path) -> str:
     if lto is not None and lto not in VALID_LTO_VALUES:
         allowed = ", ".join(VALID_LTO_VALUES)
         fail(f"{path}: field 'lto' must be one of: {allowed}")
+
+    manifest_trim = data.get("manifest_trim")
+    if manifest_trim is not None and manifest_trim not in VALID_MANIFEST_TRIM_VALUES:
+        allowed = ", ".join(VALID_MANIFEST_TRIM_VALUES)
+        fail(f"{path}: field 'manifest_trim' must be one of: {allowed}")
+
+    validate_string_list(path, data, "manifest_keep_patterns")
+    validate_string_list(path, data, "manifest_drop_projects")
 
     overlay_manifest = data.get("overlay_manifest")
     if overlay_manifest is not None:

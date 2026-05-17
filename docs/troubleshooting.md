@@ -39,11 +39,9 @@ If `ccache -s` shows no cacheable compiler calls:
 
 ## Manifest trim failures
 
-If `repo sync` fails after aggressive manifest trimming, rerun with:
+If aggressive trim breaks `repo sync` or the later kernel build:
 
-```bash
-./scripts/build-kernel.sh android16-6.12-lts \
-  --build-env CORESHIFT_MANIFEST_TRIM=safe
-```
-
-If safe mode works, inspect `manifest-trim-report.txt` in the workspace root and restore the needed keep pattern before trying aggressive mode again.
+- Set that profile JSON back to `"manifest_trim": "safe"`
+- Inspect `manifest-trim-report.txt`
+- Add needed project patterns to `manifest_keep_patterns`
+- Rerun `Test-Manifest-Trim.yml`

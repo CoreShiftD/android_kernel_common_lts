@@ -19,12 +19,23 @@ Each profile JSON under `profiles/` defines:
 - `name`
 - `manifest_branch`
 - `overlay_manifest`
+- `manifest_trim`
+- `manifest_keep_patterns`
+- `manifest_drop_projects`
 - `kernel_source_branch`
 - `build_config`
 - `bazel_target`
 - `lto`
 
 Current profiles use `name == kernel_source_branch` and `manifest_branch == common-<name>`.
+
+## Manifest trim values
+
+- `manifest_trim`: `safe`, `aggressive`, or `none`
+- `manifest_keep_patterns`: optional list of extra path/name patterns to keep during aggressive trim
+- `manifest_drop_projects`: optional list of explicit project names to remove after keep matching
+
+Missing `manifest_trim` is accepted for future compatibility and defaults to `safe`.
 
 ## LTO values
 

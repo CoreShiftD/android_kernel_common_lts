@@ -17,13 +17,16 @@ This keeps the manifest branch selection and the `kernel/common` branch selectio
 
 ## Dynamic trim modes
 
-- Default trim mode is `CORESHIFT_MANIFEST_TRIM=aggressive`
-- `aggressive` inspects the resolved manifest with `repo manifest -o ...` and generates `.repo/local_manifests/coreshift-overlay.xml` from the actual project list
-- `safe` removes only `kernel/common`
-- `none` disables aggressive trimming; by default CoreShift still removes `kernel/common` unless `CORESHIFT_KEEP_MANIFEST_COMMON=1` is set
-- Every setup run also writes `manifest-trim-report.txt` in the workspace root with kept projects, removed projects, and the keep reason for each retained project
+Manifest trim is controlled only by profile JSON.
+There is no workflow trim input and no supported trim build-env override.
 
-Aggressive trim is experimental and backend-aware. Kleaf-capable profiles intentionally keep more Bazel, Rust, JDK, and prebuilts coverage than `google_build_sh`-only profiles.
+- `manifest_trim: "safe"` removes only projects from the selected static overlay, currently `kernel/common`
+- `manifest_trim: "aggressive"` inspects the resolved manifest with `repo manifest -o ...` and generates `.repo/local_manifests/coreshift-overlay.xml` from the actual project list
+- `manifest_trim: "none"` disables aggressive trimming; CoreShift still removes `kernel/common`
+- Safe mode is the default if a profile omits `manifest_trim`
+- Every setup run writes `manifest-trim-report.txt` in the workspace root with kept projects, removed projects, keep reasons, and any profile-specific keep/drop lists
+
+Aggressive trim is experimental and must be tuned per profile.
 
 ## Static overlays
 
@@ -61,20 +64,23 @@ You can tune manifest setup with:
 - `CORESHIFT_REPO_DEPTH`
 - `CORESHIFT_REPO_PARTIAL_CLONE`
 - `CORESHIFT_REPO_CLONE_FILTER`
-- `CORESHIFT_MANIFEST_TRIM`
 - `CORESHIFT_REPO_NO_VERIFY`
 
-Examples:
+`CORESHIFT_REPO_*` and `CORESHIFT_REPO_NO_VERIFY` can be passed through `./scripts/build-kernel.sh` with `--build-env KEY=VALUE`.
+
+`CORESHIFT_UPDATE_REPO_LAUNCHER` must be exported in the shell before running `./scripts/install-build-tools.sh`. It does not take effect when passed later through `build-kernel.sh`.
+
+To experiment with trim policy, edit the profile JSON:
 
 ```bash
-./scripts/build-kernel.sh android16-6.12-lts \
-  --build-env CORESHIFT_MANIFEST_TRIM=safe
+{
+  "manifest_trim": "aggressive",
+  "manifest_keep_patterns": ["platform/testing/*"],
+  "manifest_drop_projects": ["docs/something"]
+}
 ```
 
-```bash
-./scripts/build-kernel.sh android16-6.12-lts \
-  --build-env CORESHIFT_MANIFEST_TRIM=none
-```
+Use `Test-Manifest-Trim.yml` to validate `repo init` and `repo sync` before attempting a full kernel compile.
 
 ```bash
 ./scripts/build-kernel.sh android16-6.12-lts \
