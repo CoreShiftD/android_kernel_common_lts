@@ -27,6 +27,16 @@ else
   KSU_LOG_DIR=""
 fi
 
+print_log_excerpt() {
+  local log_file="$1"
+  sed -n '1,120p' "$log_file" >&2
+}
+
+cleanup_temp_log() {
+  local log_file="$1"
+  [ -n "$KSU_LOG_DIR" ] || rm -f "$log_file"
+}
+
 requested_ksu_provider="${KSU_PROVIDER:-}"
 mapfile -t provider_fields < <(
   python3 - "$KSU_PROVIDERS_CONFIG" "$PROFILE_NAME" <<'PY'
@@ -127,14 +137,19 @@ if [ ! -f "$KSU_DIR/kernel/setup.sh" ]; then
   exit 1
 fi
 
-(
+setup_log="${KSU_LOG_DIR:+$KSU_LOG_DIR/setup.log}"
+if [ -z "$setup_log" ]; then
+  setup_log="$(mktemp)"
+fi
+if ! (
   cd "$COMMON_DIR"
-  if [ -n "$KSU_LOG_DIR" ]; then
-    sh "$KSU_DIR/kernel/setup.sh" "$KSU_REF" 2>&1 | tee "$KSU_LOG_DIR/setup.log"
-  else
-    sh "$KSU_DIR/kernel/setup.sh" "$KSU_REF"
-  fi
-)
+  sh "$KSU_DIR/kernel/setup.sh" "$KSU_REF" >"$setup_log" 2>&1
+); then
+  echo "KernelSU setup failed for $KSU_REPO @ $KSU_REF" >&2
+  print_log_excerpt "$setup_log"
+  exit 1
+fi
+cleanup_temp_log "$setup_log"
 
 ensure_line_once 'CONFIG_KSU=y' "$FEATURES_FRAGMENT"
 
@@ -146,7 +161,10 @@ if [ -n "$KSU_LOG_DIR" ]; then
     echo "KernelSU commit: $ksu_commit"
     echo "KernelSU source path: $KSU_DIR"
   } > "$KSU_LOG_DIR/source.txt"
+  git -C "$COMMON_DIR" diff --stat > "$KSU_LOG_DIR/diff.stat" || : > "$KSU_LOG_DIR/diff.stat"
 fi
 rm -rf "$KSU_DIR/.github"
+echo "KernelSU repo: $KSU_REPO"
+echo "KernelSU ref: $KSU_REF"
 echo "KernelSU commit: $ksu_commit"
 echo "KernelSU source staged at: $KSU_DIR"

@@ -22,7 +22,7 @@
 ## Artifact behavior
 
 - GitHub Actions uploads AK3 zip artifacts and CoreShift log zip artifacts separately
-- Log artifacts include build command output, manifest reports, generated overlay XML, patch logs, generated fragments, and selected profile/variant metadata
+- Log artifacts preserve patch failure artifacts, including triage files, selected patch files, touched-file lists, reject/orig files, source-context snippets, and generated fragments
 - The workflows do not upload raw workspace trees as normal build artifacts
 
 ## CI build environment

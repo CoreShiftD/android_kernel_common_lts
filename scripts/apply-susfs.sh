@@ -16,6 +16,7 @@ WORKSPACE_DIR="$1"
 PROFILE_NAME="$2"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PATCH_LOG_HELPER="$SCRIPT_DIR/patch-log-helper.sh"
 COMMON_DIR="$WORKSPACE_DIR/common"
 FEATURES_FRAGMENT="$COMMON_DIR/features.fragment"
 SUSFS_DIR="$COMMON_DIR/SUSFS"
@@ -23,12 +24,20 @@ SUSFS_REPO="${SUSFS_REPO:-https://gitlab.com/simonpunk/susfs4ksu.git}"
 SUSFS_PATCH_DIR="${SUSFS_PATCH_DIR:-}"
 SUSFS_REFS_CONFIG="$REPO_ROOT/configs/susfs-refs.json"
 SUSFS_PATCHES_CONFIG="$REPO_ROOT/configs/susfs-patches.json"
+VARIANT_NAME="${CORESHIFT_VARIANT:-unknown}"
 if [ -n "${CORESHIFT_LOG_DIR:-}" ]; then
   SUSFS_LOG_DIR="$CORESHIFT_LOG_DIR/patches/susfs"
   mkdir -p "$SUSFS_LOG_DIR"
 else
   SUSFS_LOG_DIR=""
 fi
+
+if [ ! -f "$PATCH_LOG_HELPER" ]; then
+  echo "Missing patch log helper: $PATCH_LOG_HELPER" >&2
+  exit 1
+fi
+
+. "$PATCH_LOG_HELPER"
 
 derive_profile_parts() {
   python3 - "$PROFILE_NAME" <<'PY'
@@ -249,12 +258,16 @@ ensure_line_once() {
 }
 
 patch_log_path() {
-  local patch_file="$1"
-  local dir_label="$2"
-  local name
-  name="$(basename "$patch_file")"
+  local kind="$1"
+  local patch_file="$2"
+  local base_name
+  local suffix="$kind"
+  base_name="$(basename "$patch_file")"
+  if [ "$kind" = "checks" ]; then
+    suffix="check"
+  fi
   if [ -n "$SUSFS_LOG_DIR" ]; then
-    printf '%s/%s__%s.log\n' "$SUSFS_LOG_DIR" "$dir_label" "$name"
+    printf '%s/%s/%s.%s.log\n' "$SUSFS_LOG_DIR" "$kind" "$base_name" "$suffix"
   else
     mktemp
   fi
@@ -265,21 +278,157 @@ print_log_excerpt() {
   sed -n '1,120p' "$log_file" >&2
 }
 
+cleanup_patch_log() {
+  local log_file="$1"
+  [ -n "$SUSFS_LOG_DIR" ] || rm -f "$log_file"
+}
+
+read_touched_files() {
+  local patch_file="$1"
+  local touched_file
+  touched_file="$SUSFS_LOG_DIR/touched-files/$(basename "$patch_file").txt"
+  if [ -n "$SUSFS_LOG_DIR" ] && [ -f "$touched_file" ]; then
+    sed '/^$/d' "$touched_file"
+  fi
+}
+
+format_joined_list() {
+  local first=1
+  local entry
+  for entry in "$@"; do
+    [ -n "$entry" ] || continue
+    if [ "$first" -eq 1 ]; then
+      printf '%s' "$entry"
+      first=0
+    else
+      printf ', %s' "$entry"
+    fi
+  done
+  if [ "$first" -eq 1 ]; then
+    printf '%s' "(none)"
+  fi
+}
+
+read_array_from_file() {
+  local file_path="$1"
+  if [ -f "$file_path" ]; then
+    sed '/^$/d;/^(none)$/d' "$file_path"
+  fi
+}
+
+write_susfs_triage() {
+  local reason="$1"
+  local failed_phase="$2"
+  local patch_file="${3:-}"
+  local guidance="$4"
+  local touched_file=""
+  local all_touched_file=""
+  local rejects_file=""
+  local patch_symbols_text="(none)"
+  local tree_symbols_text="(none)"
+  local found_symbols_text="(none)"
+  local missing_symbols_text="unknown"
+  local touched_text="(none)"
+  local rejects_text="(none)"
+  local -a touched_entries=()
+  local -a reject_entries=()
+
+  if [ -n "$patch_file" ] && [ -n "$SUSFS_LOG_DIR" ]; then
+    touched_file="$SUSFS_LOG_DIR/touched-files/$(basename "$patch_file").txt"
+  fi
+  if [ -n "$SUSFS_LOG_DIR" ]; then
+    all_touched_file="$SUSFS_LOG_DIR/all-touched-files.txt"
+    rejects_file="$SUSFS_LOG_DIR/rejects/index.txt"
+  fi
+
+  if [ -n "$touched_file" ] && [ -f "$touched_file" ]; then
+    mapfile -t touched_entries < <(read_array_from_file "$touched_file")
+    touched_text="$(format_joined_list "${touched_entries[@]}")"
+  elif [ -n "$all_touched_file" ] && [ -f "$all_touched_file" ]; then
+    mapfile -t touched_entries < <(read_array_from_file "$all_touched_file")
+    touched_text="$(format_joined_list "${touched_entries[@]}")"
+  fi
+  if [ -n "$rejects_file" ] && [ -f "$rejects_file" ]; then
+    mapfile -t reject_entries < <(read_array_from_file "$rejects_file")
+    rejects_text="$(format_joined_list "${reject_entries[@]}")"
+  fi
+  if [ "${#patch_config_symbols[@]}" -gt 0 ]; then
+    patch_symbols_text="$(format_joined_list "${patch_config_symbols[@]}")"
+  fi
+  if [ "${#tree_config_symbols[@]}" -gt 0 ]; then
+    tree_symbols_text="$(format_joined_list "${tree_config_symbols[@]}")"
+  fi
+  if [ "${#susfs_config_symbols[@]}" -gt 0 ]; then
+    found_symbols_text="$(format_joined_list "${susfs_config_symbols[@]}")"
+    missing_symbols_text="none"
+  elif [ "$reason" = "missing-susfs-kconfig" ]; then
+    missing_symbols_text="all KSU_SUSFS* symbols missing"
+  else
+    missing_symbols_text="not determined before failure"
+  fi
+
+  coreshift_patch_log_triage "susfs" "$reason" \
+    "- failed phase: $failed_phase" \
+    "- patch file: ${patch_file:-n/a}" \
+    "- touched files: $touched_text" \
+    "- rejects found: $rejects_text" \
+    "- config symbols found: $found_symbols_text" \
+    "- config symbols missing: $missing_symbols_text" \
+    "- patch symbols scanned: $patch_symbols_text" \
+    "- tree symbols scanned: $tree_symbols_text" \
+    "- assessment: $guidance"
+}
+
+fail_with_triage() {
+  local reason="$1"
+  local failed_phase="$2"
+  local message="$3"
+  local guidance="$4"
+  local patch_file="${5:-}"
+  local excerpt_log="${6:-}"
+
+  if [ -n "$SUSFS_LOG_DIR" ]; then
+    coreshift_patch_log_copy_rejects "susfs" "$COMMON_DIR"
+    if [ -n "$patch_file" ] && [ -f "$patch_file" ]; then
+      coreshift_patch_log_source_context "susfs" "$COMMON_DIR" "$patch_file"
+    else
+      local planned_patch
+      for planned_patch in "${selected_patch_files[@]}"; do
+        [ -f "$planned_patch" ] || continue
+        coreshift_patch_log_source_context "susfs" "$COMMON_DIR" "$planned_patch"
+      done
+    fi
+    coreshift_patch_log_git_diff "susfs" "$COMMON_DIR" "diff-before-failure"
+    write_susfs_triage "$reason" "$failed_phase" "$patch_file" "$guidance"
+  fi
+
+  echo "$message" >&2
+  if [ -n "$excerpt_log" ] && [ -f "$excerpt_log" ]; then
+    print_log_excerpt "$excerpt_log"
+  fi
+  exit 1
+}
+
 check_rejects_and_conflicts() {
   local reject_found=0
-  if find "$COMMON_DIR" -name '*.rej' -print -quit | grep -q .; then
-    reject_found=1
-    echo "SUSFS patch rejects created:" >&2
-    find "$COMMON_DIR" -name '*.rej' -print >&2
-  fi
-  if grep -RInE '^(<<<<<<<|=======|>>>>>>>)' "$COMMON_DIR" >/tmp/coreshift-susfs-conflicts.$$ 2>/dev/null; then
-    echo "SUSFS conflict markers detected:" >&2
-    sed -n '1,40p' "/tmp/coreshift-susfs-conflicts.$$" >&2
+  local conflict_log
+  conflict_log="$(mktemp)"
+  trap 'rm -f "$conflict_log"' RETURN
+  if find "$COMMON_DIR" -type f \( -name '*.rej' -o -name '*.orig' \) -print -quit | grep -q .; then
     reject_found=1
   fi
-  rm -f "/tmp/coreshift-susfs-conflicts.$$"
+  if grep -RInE '^(<<<<<<<|=======|>>>>>>>)' "$COMMON_DIR" >"$conflict_log" 2>/dev/null; then
+    reject_found=1
+    sed -n '1,40p' "$conflict_log" >&2
+  fi
+  trap - RETURN
+  rm -f "$conflict_log"
   if [ "$reject_found" -ne 0 ]; then
-    exit 1
+    fail_with_triage \
+      "patch-context-mismatch" \
+      "post-apply validation" \
+      "SUSFS patch application produced reject/orig files or conflict markers." \
+      "This is likely fixable by refreshing the selected profile-specific patch against the target source."
   fi
 }
 
@@ -287,66 +436,86 @@ apply_git_patch() {
   local phase="$1"
   local work_dir="$2"
   local patch_file="$3"
-  local dir_label="$4"
-  local log_file
-  log_file="$(patch_log_path "$patch_file" "$dir_label")"
+  local check_log
+  local apply_log
+
+  check_log="$(patch_log_path "checks" "$patch_file")"
+  apply_log="$(patch_log_path "apply" "$patch_file")"
   {
     echo "Phase: $phase"
     echo "Directory: $work_dir"
     echo "Patch: $patch_file"
-    echo
-    echo "== git apply --check =="
-  } > "$log_file"
-  if ! git -C "$work_dir" apply --check "$patch_file" >>"$log_file" 2>&1; then
-    echo "Failed git apply --check for SUSFS $phase patch: $patch_file" >&2
-    print_log_excerpt "$log_file"
-    [ -n "$SUSFS_LOG_DIR" ] || rm -f "$log_file"
-    exit 1
+  } > "$check_log"
+  if ! git -C "$work_dir" apply --check "$patch_file" >>"$check_log" 2>&1; then
+    fail_with_triage \
+      "patch-context-mismatch" \
+      "$phase check" \
+      "Failed git apply --check for SUSFS patch: $patch_file" \
+      "This is likely fixable by refreshing the selected profile-specific patch against the target source." \
+      "$patch_file" \
+      "$check_log"
   fi
+
   {
-    echo
-    echo "== git apply =="
-  } >> "$log_file"
-  if ! git -C "$work_dir" apply "$patch_file" >>"$log_file" 2>&1; then
-    echo "Failed git apply for SUSFS $phase patch: $patch_file" >&2
-    print_log_excerpt "$log_file"
-    [ -n "$SUSFS_LOG_DIR" ] || rm -f "$log_file"
-    exit 1
+    echo "Phase: $phase"
+    echo "Directory: $work_dir"
+    echo "Patch: $patch_file"
+  } > "$apply_log"
+  if ! git -C "$work_dir" apply "$patch_file" >>"$apply_log" 2>&1; then
+    fail_with_triage \
+      "patch-context-mismatch" \
+      "$phase apply" \
+      "Failed git apply for SUSFS patch: $patch_file" \
+      "This is likely fixable by refreshing the selected profile-specific patch against the target source." \
+      "$patch_file" \
+      "$apply_log"
   fi
-  [ -n "$SUSFS_LOG_DIR" ] || rm -f "$log_file"
+
+  cleanup_patch_log "$check_log"
+  cleanup_patch_log "$apply_log"
 }
 
 apply_patch_p1() {
   local phase="$1"
   local work_dir="$2"
   local patch_file="$3"
-  local dir_label="$4"
-  local log_file
-  log_file="$(patch_log_path "$patch_file" "$dir_label")"
+  local check_log
+  local apply_log
+
+  check_log="$(patch_log_path "checks" "$patch_file")"
+  apply_log="$(patch_log_path "apply" "$patch_file")"
   {
     echo "Phase: $phase"
     echo "Directory: $work_dir"
     echo "Patch: $patch_file"
-    echo
-    echo "== patch --dry-run =="
-  } > "$log_file"
-  if ! (cd "$work_dir" && patch -p1 --dry-run < "$patch_file") >>"$log_file" 2>&1; then
-    echo "Failed dry-run for SUSFS $phase patch: $patch_file" >&2
-    print_log_excerpt "$log_file"
-    [ -n "$SUSFS_LOG_DIR" ] || rm -f "$log_file"
-    exit 1
+  } > "$check_log"
+  if ! (cd "$work_dir" && patch -p1 --dry-run < "$patch_file") >>"$check_log" 2>&1; then
+    fail_with_triage \
+      "patch-context-mismatch" \
+      "$phase dry-run" \
+      "Failed patch -p1 --dry-run for SUSFS patch: $patch_file" \
+      "This is likely fixable by refreshing the selected profile-specific patch against the target source." \
+      "$patch_file" \
+      "$check_log"
   fi
+
   {
-    echo
-    echo "== patch -p1 =="
-  } >> "$log_file"
-  if ! (cd "$work_dir" && patch -p1 < "$patch_file") >>"$log_file" 2>&1; then
-    echo "Failed to apply SUSFS $phase patch: $patch_file" >&2
-    print_log_excerpt "$log_file"
-    [ -n "$SUSFS_LOG_DIR" ] || rm -f "$log_file"
-    exit 1
+    echo "Phase: $phase"
+    echo "Directory: $work_dir"
+    echo "Patch: $patch_file"
+  } > "$apply_log"
+  if ! (cd "$work_dir" && patch -p1 < "$patch_file") >>"$apply_log" 2>&1; then
+    fail_with_triage \
+      "patch-context-mismatch" \
+      "$phase apply" \
+      "Failed patch -p1 for SUSFS patch: $patch_file" \
+      "This is likely fixable by refreshing the selected profile-specific patch against the target source." \
+      "$patch_file" \
+      "$apply_log"
   fi
-  [ -n "$SUSFS_LOG_DIR" ] || rm -f "$log_file"
+
+  cleanup_patch_log "$check_log"
+  cleanup_patch_log "$apply_log"
 }
 
 copy_external_support_file() {
@@ -409,10 +578,14 @@ locate_ksu_root() {
   local marker
   marker="$(find "$COMMON_DIR" -type f -path '*/kernel/include/ksu.h' -print | sort | head -n 1 || true)"
   if [ -z "$marker" ]; then
-    echo "Unable to locate integrated KSU root under $COMMON_DIR." >&2
-    echo "Nearby KSU directories:" >&2
-    find "$COMMON_DIR" -type d \( -iname '*kernelsu*' -o -iname '*ksu*' \) | sort >&2 || true
-    exit 1
+    if [ -n "$SUSFS_LOG_DIR" ]; then
+      {
+        echo "Unable to locate integrated KSU root under $COMMON_DIR."
+        echo "Nearby KSU directories:"
+        find "$COMMON_DIR" -type d \( -iname '*kernelsu*' -o -iname '*ksu*' \) | sort || true
+      } > "$SUSFS_LOG_DIR/ksu-root-error.txt"
+    fi
+    return 1
   fi
   printf '%s\n' "${marker%/kernel/include/ksu.h}"
 }
@@ -427,13 +600,14 @@ write_log_file() {
 fail_missing_symbols() {
   [ -n "$SUSFS_LOG_DIR" ] && cat > "$SUSFS_LOG_DIR/susfs-config-error.txt" <<'EOF'
 SUSFS integration did not declare any KSU_SUSFS* Kconfig symbols.
-The selected SUSFS ref/patch set is incomplete or wrong.
-Check SUSFS_REF, configs/susfs-patches.json, and patch logs.
+The selected SUSFS ref/patch set is incomplete or the KSU-side integration patch did not apply.
+Check susfs-config-symbols.txt, ksu-root.txt, selected patches, and patch logs.
 EOF
-  echo "SUSFS integration did not declare any KSU_SUSFS* Kconfig symbols." >&2
-  echo "The selected SUSFS ref/patch set is incomplete or wrong." >&2
-  echo "Check SUSFS_REF, configs/susfs-patches.json, and patch logs." >&2
-  exit 1
+  fail_with_triage \
+    "missing-susfs-kconfig" \
+    "config scan" \
+    "SUSFS integration did not declare any KSU_SUSFS* Kconfig symbols." \
+    "This needs a patch-bundle or KSU integration fix; the selected patch set is incomplete or the KSU-side patch did not apply."
 }
 
 if [ ! -d "$COMMON_DIR" ]; then
@@ -459,6 +633,7 @@ fi
 mapfile -t profile_parts < <(derive_profile_parts)
 ANDROID_RELEASE="${profile_parts[0]}"
 KERNEL_VERSION="${profile_parts[1]}"
+coreshift_patch_log_init "susfs" "$PROFILE_NAME" "$VARIANT_NAME"
 
 mapfile -t configured_patch_sources < <(resolve_patch_entry_list patches || true)
 mapfile -t configured_ksu_patch_sources < <(resolve_patch_entry_list ksu_patches || true)
@@ -474,6 +649,9 @@ copied_files=()
 selected_patch_files=()
 ksu_patch_files=()
 core_patch_files=()
+patch_config_symbols=()
+tree_config_symbols=()
+susfs_config_symbols=()
 mode_label=""
 patch_root=""
 core_patch_file=""
@@ -503,22 +681,33 @@ fi
 
 if [ "$mode_label" = "local-bundle" ] || [ "$mode_label" = "simonpunk" ]; then
   if [ ! -f "$patch_root/fs/susfs.c" ]; then
-    echo "Missing SUSFS source file: $patch_root/fs/susfs.c" >&2
-    exit 1
+    fail_with_triage \
+      "missing-source-file" \
+      "bundle validation" \
+      "Missing SUSFS source file: $patch_root/fs/susfs.c" \
+      "This needs a patch-bundle or copy-source fix; the selected SUSFS bundle does not contain fs/susfs.c."
   fi
   if ! find "$patch_root/include/linux" -maxdepth 1 -type f -name '*.h' -print -quit | grep -q .; then
-    echo "Missing SUSFS headers under: $patch_root/include/linux" >&2
-    exit 1
+    fail_with_triage \
+      "missing-source-file" \
+      "bundle validation" \
+      "Missing SUSFS headers under: $patch_root/include/linux" \
+      "This needs a patch-bundle or copy-source fix; the selected SUSFS bundle does not contain the required headers."
   fi
   if [ ! -f "$patch_root/KernelSU/10_enable_susfs_for_ksu.patch" ]; then
-    echo "Missing KernelSU SUSFS patch: $patch_root/KernelSU/10_enable_susfs_for_ksu.patch" >&2
-    exit 1
+    fail_with_triage \
+      "unsupported-patch-bundle" \
+      "bundle validation" \
+      "Missing KernelSU SUSFS patch: $patch_root/KernelSU/10_enable_susfs_for_ksu.patch" \
+      "This needs a patch-bundle fix; the selected SUSFS bundle does not provide the required KernelSU integration patch."
   fi
   core_patch_file="$(select_core_patch "$patch_root" || true)"
   if [ -z "$core_patch_file" ]; then
-    echo "No Simonpunk core SUSFS patch found for $PROFILE_NAME under $patch_root." >&2
-    echo "Set SUSFS_REF or SUSFS_PATCH_DIR to a compatible Simonpunk layout." >&2
-    exit 1
+    fail_with_triage \
+      "unsupported-patch-bundle" \
+      "bundle validation" \
+      "No Simonpunk core SUSFS patch found for $PROFILE_NAME under $patch_root." \
+      "This needs a patch-bundle fix; select a compatible SUSFS ref or bundle for the target profile source."
   fi
   ksu_patch_file="$patch_root/KernelSU/10_enable_susfs_for_ksu.patch"
   copy_bundle_files "$patch_root"
@@ -538,42 +727,60 @@ else
     mapfile -t ksu_patch_files < <(download_sources "external-ksu-patches" "${configured_ksu_patch_sources[@]}")
   fi
   if [ "${#core_patch_files[@]}" -eq 0 ]; then
-    echo "No local SUSFS patch bundle configured for $PROFILE_NAME. Set SUSFS_PATCH_DIR or configs/susfs-patches.json." >&2
-    exit 1
+    fail_with_triage \
+      "unsupported-patch-bundle" \
+      "bundle validation" \
+      "No local SUSFS patch bundle configured for $PROFILE_NAME. Set SUSFS_PATCH_DIR or configs/susfs-patches.json." \
+      "This needs a patch-bundle fix; configure a compatible SUSFS patch set before running the SUSFS phase."
   fi
 fi
 
 selected_patch_files=("${core_patch_files[@]}" "${ksu_patch_files[@]}")
 
+coreshift_patch_log_patch_plan "susfs" "${selected_patch_files[@]}"
+
 mapfile -t patch_config_symbols < <(scan_patch_config_symbols "${selected_patch_files[@]}")
 
 for patch_file in "${core_patch_files[@]}"; do
   if [ "$mode_label" = "external" ]; then
-    apply_patch_p1 "core SUSFS" "$COMMON_DIR" "$patch_file" "common"
+    apply_patch_p1 "core SUSFS" "$COMMON_DIR" "$patch_file"
   else
-    apply_git_patch "core SUSFS" "$COMMON_DIR" "$patch_file" "common"
+    apply_git_patch "core SUSFS" "$COMMON_DIR" "$patch_file"
   fi
 done
 
-KSU_ROOT="$(locate_ksu_root)"
+if ! KSU_ROOT="$(locate_ksu_root)"; then
+  fail_with_triage \
+    "missing-kernel-su-root" \
+    "KernelSU root discovery" \
+    "Unable to locate integrated KSU root under $COMMON_DIR." \
+    "This needs a KernelSU or MultiSU provider integration fix before SUSFS can be applied."
+fi
+write_log_file "ksu-root.txt" "$KSU_ROOT"
 
 for patch_file in "${ksu_patch_files[@]}"; do
   if [ "$mode_label" = "external" ]; then
-    apply_patch_p1 "KernelSU SUSFS" "$KSU_ROOT" "$patch_file" "ksu-root"
+    apply_patch_p1 "KernelSU SUSFS" "$KSU_ROOT" "$patch_file"
   else
-    apply_git_patch "KernelSU SUSFS" "$KSU_ROOT" "$patch_file" "ksu-root"
+    apply_git_patch "KernelSU SUSFS" "$KSU_ROOT" "$patch_file"
   fi
 done
 
 check_rejects_and_conflicts
 
 if [ ! -f "$COMMON_DIR/fs/susfs.c" ]; then
-  echo "SUSFS source file missing after integration: $COMMON_DIR/fs/susfs.c" >&2
-  exit 1
+  fail_with_triage \
+    "missing-source-file" \
+    "post-apply validation" \
+    "SUSFS source file missing after integration: $COMMON_DIR/fs/susfs.c" \
+    "This needs a patch-bundle or copy-source fix; fs/susfs.c was not staged into the target source tree."
 fi
 if ! find "$COMMON_DIR/include/linux" -maxdepth 1 -type f -name 'susfs*.h' -print -quit | grep -q .; then
-  echo "SUSFS headers missing after integration under $COMMON_DIR/include/linux" >&2
-  exit 1
+  fail_with_triage \
+    "missing-source-file" \
+    "post-apply validation" \
+    "SUSFS headers missing after integration under $COMMON_DIR/include/linux" \
+    "This needs a patch-bundle or copy-source fix; required SUSFS headers were not staged into the target source tree."
 fi
 
 mapfile -t tree_config_symbols < <(scan_tree_config_symbols)

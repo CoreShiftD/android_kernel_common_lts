@@ -26,6 +26,16 @@ else
   BBG_LOG_DIR=""
 fi
 
+print_log_excerpt() {
+  local log_file="$1"
+  sed -n '1,120p' "$log_file" >&2
+}
+
+cleanup_temp_log() {
+  local log_file="$1"
+  [ -n "$BBG_LOG_DIR" ] || rm -f "$log_file"
+}
+
 update_bbg_fragment() {
   local private_required="$COMMON_DIR/private.required"
   local gki_defconfig="$COMMON_DIR/arch/arm64/configs/gki_defconfig"
@@ -142,14 +152,19 @@ fi
 bbg_commit="$(git -C "$BBG_DIR" rev-parse HEAD)"
 echo "Selected BBG commit: $bbg_commit"
 
-(
+setup_log="${BBG_LOG_DIR:+$BBG_LOG_DIR/setup.log}"
+if [ -z "$setup_log" ]; then
+  setup_log="$(mktemp)"
+fi
+if ! (
   cd "$COMMON_DIR"
-  if [ -n "$BBG_LOG_DIR" ]; then
-    sh "$BBG_DIR/setup.sh" "$BBG_REF" 2>&1 | tee "$BBG_LOG_DIR/setup.log"
-  else
-    sh "$BBG_DIR/setup.sh" "$BBG_REF"
-  fi
-)
+  sh "$BBG_DIR/setup.sh" "$BBG_REF" >"$setup_log" 2>&1
+); then
+  echo "BBG setup failed for $BBG_REPO @ $BBG_REF" >&2
+  print_log_excerpt "$setup_log"
+  exit 1
+fi
+cleanup_temp_log "$setup_log"
 
 bbg_lsm_value="$(update_bbg_fragment)"
 echo "BBG CONFIG_LSM=\"$bbg_lsm_value\""
@@ -163,7 +178,10 @@ if [ -n "$BBG_LOG_DIR" ]; then
     echo "BBG source path: $BBG_DIR"
     echo "BBG CONFIG_LSM=\"$bbg_lsm_value\""
   } > "$BBG_LOG_DIR/source.txt"
+  git -C "$COMMON_DIR" diff --stat > "$BBG_LOG_DIR/diff.stat" || : > "$BBG_LOG_DIR/diff.stat"
 fi
 rm -rf "$BBG_DIR/.github"
+echo "BBG repo: $BBG_REPO"
+echo "BBG ref: $BBG_REF"
 echo "BBG commit: $bbg_commit"
 echo "BBG source staged at: $BBG_DIR"

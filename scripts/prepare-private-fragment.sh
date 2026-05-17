@@ -38,6 +38,26 @@ BUILD_BAZEL="$COMMON_DIR/BUILD.bazel"
 GKI_DEFCONFIG="$COMMON_DIR/arch/arm64/configs/gki_defconfig"
 MERGE_CONFIG_SH="$COMMON_DIR/scripts/kconfig/merge_config.sh"
 WRAPPER_BUILD_CONFIG="$COMMON_DIR/build.config.coreshift.gki.aarch64"
+FRAGMENTS_LOG_DIR="${CORESHIFT_LOG_DIR:-}"
+if [ -n "$FRAGMENTS_LOG_DIR" ]; then
+  FRAGMENTS_LOG_DIR="$FRAGMENTS_LOG_DIR/fragments"
+  mkdir -p "$FRAGMENTS_LOG_DIR"
+fi
+
+copy_fragment_to_log() {
+  local source_file="$1"
+  [ -n "$FRAGMENTS_LOG_DIR" ] || return 0
+  [ -f "$source_file" ] || return 0
+  cp "$source_file" "$FRAGMENTS_LOG_DIR/$(basename "$source_file")"
+}
+
+print_file_summary() {
+  local label="$1"
+  local source_file="$2"
+  local line_count
+  line_count="$(wc -l < "$source_file")"
+  echo "$label: $source_file ($line_count lines)"
+}
 
 if [ ! -f "$PROFILE_JSON" ]; then
   echo "Profile not found: $PROFILE_JSON" >&2
@@ -194,12 +214,16 @@ if [ ! -f "$USER_FRAGMENT" ]; then
   echo "No user private.fragment found. To customize, copy configs/fragments/private.fragment.example to private.fragment."
 fi
 
-echo "Generated fragment: $GENERATED_FRAGMENT"
-cat "$GENERATED_FRAGMENT"
-echo "Generated LTO fragment: $LTO_FRAGMENT"
-cat "$LTO_FRAGMENT"
-echo "Generated features fragment: $FEATURES_FRAGMENT"
-cat "$FEATURES_FRAGMENT"
+copy_fragment_to_log "$GENERATED_FRAGMENT"
+copy_fragment_to_log "$REQUIRED_FRAGMENT"
+copy_fragment_to_log "$LTO_FRAGMENT"
+copy_fragment_to_log "$FEATURES_FRAGMENT"
+copy_fragment_to_log "$KLEAF_FRAGMENT"
+print_file_summary "Generated fragment" "$GENERATED_FRAGMENT"
+print_file_summary "Generated required fragment" "$REQUIRED_FRAGMENT"
+print_file_summary "Generated LTO fragment" "$LTO_FRAGMENT"
+print_file_summary "Generated features fragment" "$FEATURES_FRAGMENT"
+print_file_summary "Generated Kleaf fragment" "$KLEAF_FRAGMENT"
 
 if [ -n "$BAZEL_TARGET" ]; then
   if [ ! -f "$BUILD_BAZEL" ]; then
@@ -281,6 +305,6 @@ EOF
     exit 1
   fi
 
-  echo "Generated wrapper build config: $WRAPPER_BUILD_CONFIG"
-  cat "$WRAPPER_BUILD_CONFIG"
+  copy_fragment_to_log "$WRAPPER_BUILD_CONFIG"
+  print_file_summary "Generated wrapper build config" "$WRAPPER_BUILD_CONFIG"
 fi

@@ -90,6 +90,11 @@ repo_launcher_version() {
   printf 'unknown\n'
 }
 
+print_log_excerpt() {
+  local log_file="$1"
+  sed -n '1,120p' "$log_file" >&2
+}
+
 case "$CORESHIFT_REPO_PARTIAL_CLONE" in
   1)
     repo_partial_clone_enabled=1
@@ -171,18 +176,23 @@ fi
 
   if ! repo init \
     "${repo_init_base_args[@]}" \
-    "${repo_init_optional_args[@]}" 2>&1 | tee "$repo_init_log"
+    "${repo_init_optional_args[@]}" >"$repo_init_log" 2>&1
   then
     if grep -Eqi 'no such option|unknown option|unrecognized arguments|invalid option' "$repo_init_log"; then
       echo "repo init retrying without optional flags"
-      repo init "${repo_init_base_args[@]}" 2>&1 | tee "$repo_init_log"
+      if ! repo init "${repo_init_base_args[@]}" >"$repo_init_log" 2>&1; then
+        echo "repo init failed; inspect $repo_init_log" >&2
+        print_log_excerpt "$repo_init_log"
+        exit 1
+      fi
     else
+      echo "repo init failed; inspect $repo_init_log" >&2
+      print_log_excerpt "$repo_init_log"
       exit 1
     fi
   fi
 
-  echo "initialized repo version:"
-  repo version || true
+  echo "Repo init completed"
 
   mkdir -p .repo/local_manifests
   OVERLAY_OUTPUT="$WORKSPACE_DIR/.repo/local_manifests/coreshift-overlay.xml"
@@ -218,15 +228,22 @@ fi
 
   if ! repo sync \
     "${repo_sync_base_args[@]}" \
-    "${repo_sync_optional_args[@]}" 2>&1 | tee "$repo_sync_log"
+    "${repo_sync_optional_args[@]}" >"$repo_sync_log" 2>&1
   then
     if grep -Eqi 'no such option|unknown option|unrecognized arguments|invalid option' "$repo_sync_log"; then
       echo "repo sync retrying without optional flags"
-      repo sync "${repo_sync_base_args[@]}" 2>&1 | tee "$repo_sync_log"
+      if ! repo sync "${repo_sync_base_args[@]}" >"$repo_sync_log" 2>&1; then
+        echo "repo sync failed; inspect $repo_sync_log" >&2
+        print_log_excerpt "$repo_sync_log"
+        exit 1
+      fi
     else
+      echo "repo sync failed; inspect $repo_sync_log" >&2
+      print_log_excerpt "$repo_sync_log"
       exit 1
     fi
   fi
+  echo "Repo sync completed"
 
   rm -rf common
   git clone --depth=1 --branch "$KERNEL_SOURCE_BRANCH" "$KERNEL_COMMON_URL" common

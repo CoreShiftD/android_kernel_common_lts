@@ -58,9 +58,33 @@ For 5.4 SUSFS patch rejects or missing `KSU_SUSFS*` symbols, check `patches/susf
 
 ## Build log artifacts
 
-Every build workflow uploads a separate CoreShift logs artifact next to the AK3 artifact. The log zip includes `build-kernel.log`, manifest reports, generated overlay XML, patch logs, generated fragments, selected profile/variant metadata, workspace diagnostics, and reject files when present.
+Every build workflow uploads a separate CoreShift logs artifact next to the AK3 artifact. The log zip includes `SUMMARY.md`, `build-kernel.log`, manifest reports, generated overlay XML, generated fragments, patch logs, selected patch files, touched-file lists, reject/orig files, source-context snippets, and selected profile/variant metadata.
 
-For SUSFS failures, inspect `patches/susfs/*.log`, `susfs-config-symbols.txt`, and any included `*.rej` files.
+### How to read log bundles
+
+Start with `SUMMARY.md`.
+
+Then inspect `patches/susfs/triage.md`.
+
+For patch mismatch failures, inspect:
+
+- `patches/susfs/selected-patches/`
+- `patches/susfs/touched-files/`
+- `patches/susfs/checks/*.check.log`
+- `patches/susfs/rejects/`
+- `patches/susfs/source-context/`
+
+For missing SUSFS config symbols, inspect:
+
+- `patches/susfs/susfs-config-symbols.txt`
+- `patches/susfs/susfs-config-error.txt`
+- `patches/susfs/ksu-root.txt`
+
+If triage says `patch-context-mismatch`, it is usually fixable by a refreshed profile-specific patch against the target source.
+
+If triage says `missing-susfs-kconfig`, the selected patch bundle is incomplete or the KSU integration patch did not apply.
+
+If triage says `missing-kernel-su-root`, KernelSU or MultiSU provider integration failed before SUSFS.
 
 For manifest policy issues, inspect `manifest-trim-report.txt` and `coreshift-overlay.xml`.
 

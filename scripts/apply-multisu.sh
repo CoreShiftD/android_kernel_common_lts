@@ -128,6 +128,7 @@ if [ -n "$MULTISU_LOG_DIR" ]; then
     echo 'drivers/Makefile: obj-$(CONFIG_KSU) += kernelsu/'
     echo 'drivers/Kconfig: source "drivers/kernelsu/Kconfig"'
   } > "$MULTISU_LOG_DIR/setup.log"
+  git -C "$COMMON_DIR" diff --stat > "$MULTISU_LOG_DIR/diff.stat" || : > "$MULTISU_LOG_DIR/diff.stat"
 fi
 
 rm -rf "$MULTISU_DIR/.github"
