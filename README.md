@@ -4,6 +4,8 @@ This repo uses a manifest-based ACK workspace design driven by `profiles/*.json`
 
 `manifests/coreshift-overlay.xml` is not a standalone repo manifest. It is a local manifest overlay copied into `.repo/local_manifests/` after `repo init` against `https://android.googlesource.com/kernel/manifest`. Its only current job is to remove the manifest-provided `kernel/common` checkout so the requested `kernel/common` branch can be cloned into `common/`.
 
+CoreShift still syncs the rest of the ACK manifest workspace through `repo`, including the Kleaf, build, and prebuilt projects that `google_build_sh` and Kleaf need. Removing `kernel/common` from the overlay does not make manifest sync instant because those other manifest projects still come from `repo sync`.
+
 ## Profile schema
 
 Each profile in `profiles/*.json` must define:
@@ -45,10 +47,24 @@ scripts/setup-manifest-workspace.sh profiles/<branch>.json <workspace>
 This script will:
 
 1. Read `manifest_branch` and `kernel_source_branch` from the profile.
-2. Run `repo init -u https://android.googlesource.com/kernel/manifest -b "$MANIFEST_BRANCH"`.
+2. Run `repo init -u https://android.googlesource.com/kernel/manifest -b "$MANIFEST_BRANCH"` with shallow sync defaults and partial clone enabled by default.
 3. Copy `manifests/coreshift-overlay.xml` into `.repo/local_manifests/`.
-4. Run `repo sync`.
+4. Run `repo sync` with 4 jobs by default.
 5. Clone `https://android.googlesource.com/kernel/common -b "$KERNEL_SOURCE_BRANCH"` into `common/`.
+
+Manifest sync tuning knobs:
+
+- CoreShift uses repo partial clone by default.
+- Default repo sync jobs: 4.
+- `kernel/common` is still cloned separately after `repo sync`.
+- Users can tune sync behavior with:
+
+```bash
+./scripts/build-kernel.sh android13-5.15-lts \
+  --build-env CORESHIFT_REPO_JOBS=2 \
+  --build-env CORESHIFT_REPO_PARTIAL_CLONE=0 \
+  --build-env CORESHIFT_REPO_CLONE_FILTER=blob:none
+```
 
 Run a manifest workspace build with:
 
@@ -116,7 +132,7 @@ For local builds, you can install the required host tooling with:
 ./scripts/install-build-tools.sh
 ```
 
-This installs host tooling, the `repo` launcher, Arm64 cross libc headers, `ccache`, and common kernel build dependencies from the current Ubuntu package sources. It does not override the ACK/AOSP Clang selected by the synced Google kernel manifest.
+This installs host tooling, downloads the upstream `repo` launcher into `$HOME/.local/bin/repo` so it is preferred over `/usr/bin/repo`, and installs Arm64 cross libc headers, `ccache`, and common kernel build dependencies from the current Ubuntu package sources. It does not override the ACK/AOSP Clang selected by the synced Google kernel manifest.
 
 By default, it only runs `apt-get update` plus `apt-get install`, which is faster and more reproducible for CI. If you explicitly want a broader host package refresh, you can opt in to:
 

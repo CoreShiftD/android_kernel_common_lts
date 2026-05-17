@@ -3,6 +3,7 @@ set -euo pipefail
 
 LOCAL_BIN="$HOME/.local/bin"
 LOCAL_REPO="$LOCAL_BIN/repo"
+REPO_LAUNCHER_URL="https://storage.googleapis.com/git-repo-downloads/repo"
 
 APT_PACKAGES=(
   git
@@ -37,6 +38,7 @@ if ! command -v apt-get >/dev/null 2>&1; then
 fi
 
 mkdir -p "$LOCAL_BIN"
+export PATH="$LOCAL_BIN:$PATH"
 
 sudo apt-get update
 if [ "${CORESHIFT_APT_UPGRADE:-0}" = "1" ]; then
@@ -46,18 +48,9 @@ sudo apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"
 sudo apt-get install -y --no-install-recommends libncurses5 libtinfo5 || true
 sudo apt-get install -y --no-install-recommends libncurses6 libtinfo6 || true
 
-if command -v repo >/dev/null 2>&1; then
-  echo "repo already available: $(command -v repo)"
-else
-  sudo apt-get install -y --no-install-recommends repo || true
-
-  if ! command -v repo >/dev/null 2>&1; then
-    curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o "$LOCAL_REPO"
-    chmod +x "$LOCAL_REPO"
-  fi
-fi
-
-export PATH="$LOCAL_BIN:$PATH"
+curl -fsSL "$REPO_LAUNCHER_URL" -o "$LOCAL_REPO"
+chmod +x "$LOCAL_REPO"
+hash -r
 
 if [ -n "${GITHUB_PATH:-}" ]; then
   echo "$LOCAL_BIN" >> "$GITHUB_PATH"
@@ -110,6 +103,7 @@ echo "Installed host tool versions:"
 git --version
 python3 --version
 make --version | head -n 1
+echo "repo launcher: $(command -v repo)"
 repo --version || true
 aarch64-linux-gnu-gcc --version | head -n 1 || true
 pahole --version || true

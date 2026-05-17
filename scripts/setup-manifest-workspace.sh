@@ -31,6 +31,10 @@ WORKSPACE_DIR="$2"
 OVERLAY_SOURCE="$REPO_ROOT/manifests/coreshift-overlay.xml"
 MANIFEST_URL="https://android.googlesource.com/kernel/manifest"
 KERNEL_COMMON_URL="https://android.googlesource.com/kernel/common"
+CORESHIFT_REPO_JOBS="${CORESHIFT_REPO_JOBS:-4}"
+CORESHIFT_REPO_DEPTH="${CORESHIFT_REPO_DEPTH:-1}"
+CORESHIFT_REPO_PARTIAL_CLONE="${CORESHIFT_REPO_PARTIAL_CLONE:-1}"
+CORESHIFT_REPO_CLONE_FILTER="${CORESHIFT_REPO_CLONE_FILTER:-blob:none}"
 
 if [ ! -f "$PROFILE_JSON" ]; then
   echo "Profile not found: $PROFILE_JSON" >&2
@@ -66,18 +70,73 @@ PY
 mkdir -p "$WORKSPACE_DIR"
 WORKSPACE_DIR="$(cd "$WORKSPACE_DIR" && pwd)"
 
+repo_launcher_path="$(command -v repo)"
+repo_version="$(
+  repo --version 2>/dev/null | head -n 1 || true
+)"
+
+case "$CORESHIFT_REPO_PARTIAL_CLONE" in
+  1)
+    repo_partial_clone_enabled=1
+    repo_partial_clone_label="on"
+    ;;
+  *)
+    repo_partial_clone_enabled=0
+    repo_partial_clone_label="off"
+    ;;
+esac
+
+echo "Manifest workspace setup:"
+echo "  repo launcher path: $repo_launcher_path"
+echo "  repo version: ${repo_version:-unknown}"
+echo "  manifest branch: $MANIFEST_BRANCH"
+echo "  kernel source branch: $KERNEL_SOURCE_BRANCH"
+echo "  repo jobs: $CORESHIFT_REPO_JOBS"
+echo "  partial clone: $repo_partial_clone_label"
+echo "  clone filter: $CORESHIFT_REPO_CLONE_FILTER"
+echo "  workspace path: $WORKSPACE_DIR"
+
 (
   cd "$WORKSPACE_DIR"
+
+  repo_init_log="$(mktemp)"
+  repo_sync_log="$(mktemp)"
+  cleanup_logs() {
+    rm -f "$repo_init_log" "$repo_sync_log"
+  }
+  trap cleanup_logs EXIT
 
   if [ -e .repo ] && [ ! -d .repo ]; then
     echo "Workspace has a non-directory .repo entry: $WORKSPACE_DIR" >&2
     exit 1
   fi
 
-  repo init \
-    -u "$MANIFEST_URL" \
-    -b "$MANIFEST_BRANCH" \
-    --depth=1
+  repo_init_base_args=(
+    -u "$MANIFEST_URL"
+    -b "$MANIFEST_BRANCH"
+    --depth="$CORESHIFT_REPO_DEPTH"
+  )
+  repo_init_optional_args=(
+    --no-repo-verify
+  )
+
+  if [ "$repo_partial_clone_enabled" -eq 1 ]; then
+    repo_init_optional_args+=(
+      --partial-clone
+      --clone-filter="$CORESHIFT_REPO_CLONE_FILTER"
+    )
+  fi
+
+  if ! repo init \
+    "${repo_init_base_args[@]}" \
+    "${repo_init_optional_args[@]}" 2>&1 | tee "$repo_init_log"; then
+    if grep -qiE 'unknown option|unrecognized option|unsupported option|no such option' "$repo_init_log"; then
+      echo "repo init retrying without optional flags"
+      repo init "${repo_init_base_args[@]}" 2>&1 | tee "$repo_init_log"
+    else
+      exit 1
+    fi
+  fi
 
   mkdir -p .repo/local_manifests
   cp "$OVERLAY_SOURCE" .repo/local_manifests/coreshift-overlay.xml
@@ -87,16 +146,32 @@ WORKSPACE_DIR="$(cd "$WORKSPACE_DIR" && pwd)"
     exit 1
   fi
 
-  repo sync \
-    -c \
-    --fail-fast \
-    --no-clone-bundle \
-    --no-tags \
-    -j "$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 8)"
+  repo_sync_base_args=(
+    -c
+    --fail-fast
+    --no-clone-bundle
+    --no-tags
+    -j "$CORESHIFT_REPO_JOBS"
+  )
+  repo_sync_optional_args=(
+    --optimized-fetch
+    --prune
+  )
+
+  if ! repo sync \
+    "${repo_sync_base_args[@]}" \
+    "${repo_sync_optional_args[@]}" 2>&1 | tee "$repo_sync_log"; then
+    if grep -qiE 'unknown option|unrecognized option|unsupported option|no such option' "$repo_sync_log"; then
+      echo "repo sync retrying without optional flags"
+      repo sync "${repo_sync_base_args[@]}" 2>&1 | tee "$repo_sync_log"
+    else
+      exit 1
+    fi
+  fi
 
   rm -rf common
   git clone \
-    --depth=1 \
+    --depth="$CORESHIFT_REPO_DEPTH" \
     --branch "$KERNEL_SOURCE_BRANCH" \
     "$KERNEL_COMMON_URL" \
     common
