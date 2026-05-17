@@ -18,6 +18,12 @@ FEATURES_FRAGMENT="$COMMON_DIR/features.fragment"
 KSU_DIR="$COMMON_DIR/KernelSU"
 KSU_REPO="${KSU_REPO:-https://github.com/tiann/KernelSU.git}"
 KSU_REF="${KSU_REF:-main}"
+if [ -n "${CORESHIFT_LOG_DIR:-}" ]; then
+  KSU_LOG_DIR="$CORESHIFT_LOG_DIR/patches/ksu"
+  mkdir -p "$KSU_LOG_DIR"
+else
+  KSU_LOG_DIR=""
+fi
 
 ensure_line_once() {
   local wanted_line="$1"
@@ -66,12 +72,24 @@ fi
 
 (
   cd "$COMMON_DIR"
-  sh "$KSU_DIR/kernel/setup.sh" "$KSU_REF"
+  if [ -n "$KSU_LOG_DIR" ]; then
+    sh "$KSU_DIR/kernel/setup.sh" "$KSU_REF" 2>&1 | tee "$KSU_LOG_DIR/setup.log"
+  else
+    sh "$KSU_DIR/kernel/setup.sh" "$KSU_REF"
+  fi
 )
 
 ensure_line_once 'CONFIG_KSU=y' "$FEATURES_FRAGMENT"
 
 ksu_commit="$(git -C "$KSU_DIR" rev-parse HEAD)"
+if [ -n "$KSU_LOG_DIR" ]; then
+  {
+    echo "KernelSU repo: $KSU_REPO"
+    echo "KernelSU ref: $KSU_REF"
+    echo "KernelSU commit: $ksu_commit"
+    echo "KernelSU source path: $KSU_DIR"
+  } > "$KSU_LOG_DIR/source.txt"
+fi
 rm -rf "$KSU_DIR/.github"
 echo "KernelSU commit: $ksu_commit"
 echo "KernelSU source staged at: $KSU_DIR"

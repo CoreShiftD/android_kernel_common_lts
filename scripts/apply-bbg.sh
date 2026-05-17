@@ -19,6 +19,12 @@ FEATURES_FRAGMENT="$COMMON_DIR/features.fragment"
 BBG_DIR="$COMMON_DIR/Baseband-guard"
 BBG_REPO="${BBG_REPO:-https://github.com/vc-teahouse/Baseband-guard.git}"
 BBG_REF="${BBG_REF:-main}"
+if [ -n "${CORESHIFT_LOG_DIR:-}" ]; then
+  BBG_LOG_DIR="$CORESHIFT_LOG_DIR/patches/bbg"
+  mkdir -p "$BBG_LOG_DIR"
+else
+  BBG_LOG_DIR=""
+fi
 
 update_bbg_fragment() {
   local private_required="$COMMON_DIR/private.required"
@@ -138,13 +144,26 @@ echo "Selected BBG commit: $bbg_commit"
 
 (
   cd "$COMMON_DIR"
-  sh "$BBG_DIR/setup.sh" "$BBG_REF"
+  if [ -n "$BBG_LOG_DIR" ]; then
+    sh "$BBG_DIR/setup.sh" "$BBG_REF" 2>&1 | tee "$BBG_LOG_DIR/setup.log"
+  else
+    sh "$BBG_DIR/setup.sh" "$BBG_REF"
+  fi
 )
 
 bbg_lsm_value="$(update_bbg_fragment)"
 echo "BBG CONFIG_LSM=\"$bbg_lsm_value\""
 
 bbg_commit="$(git -C "$BBG_DIR" rev-parse HEAD)"
+if [ -n "$BBG_LOG_DIR" ]; then
+  {
+    echo "BBG repo: $BBG_REPO"
+    echo "BBG ref: $BBG_REF"
+    echo "BBG commit: $bbg_commit"
+    echo "BBG source path: $BBG_DIR"
+    echo "BBG CONFIG_LSM=\"$bbg_lsm_value\""
+  } > "$BBG_LOG_DIR/source.txt"
+fi
 rm -rf "$BBG_DIR/.github"
 echo "BBG commit: $bbg_commit"
 echo "BBG source staged at: $BBG_DIR"

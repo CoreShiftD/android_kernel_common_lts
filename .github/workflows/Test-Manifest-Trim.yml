@@ -90,12 +90,38 @@ jobs:
         shell: bash
         run: ./scripts/install-build-tools.sh
 
+      - name: Prepare log metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG_DIR="$GITHUB_WORKSPACE/.logs/${{ matrix.profile }}/manifest"
+          mkdir -p "$LOG_DIR"
+          {
+            echo "workflow=${{ github.workflow }}"
+            echo "run_id=${{ github.run_id }}"
+            echo "run_number=${{ github.run_number }}"
+            echo "commit_sha=${{ github.sha }}"
+            echo "ref_name=${{ github.ref_name }}"
+            echo "profile=${{ matrix.profile }}"
+            echo "variant=manifest"
+            echo "runner_os=${{ runner.os }}"
+            date -u '+date_utc=%Y-%m-%dT%H:%M:%SZ'
+          } > "$LOG_DIR/metadata.txt"
+
       - name: Test manifest trim
         shell: bash
         run: |
           set -euo pipefail
+          LOG_DIR="$GITHUB_WORKSPACE/.logs/${{ matrix.profile }}/manifest"
+          mkdir -p "$LOG_DIR"
+          export CORESHIFT_LOG_DIR="$LOG_DIR"
+
+          set +e
           ./scripts/test-manifest-trim.sh "profiles/${{ matrix.profile }}.json" ".work/${{ matrix.profile }}" \
-            --extra-remove-projects "${{ inputs.extra_remove_projects }}"
+            --extra-remove-projects "${{ inputs.extra_remove_projects }}" 2>&1 | tee "$LOG_DIR/test-manifest-trim.log"
+          status="${PIPESTATUS[0]}"
+          echo "$status" > "$LOG_DIR/build-exit-code.txt"
+          exit "$status"
 
       - name: Upload manifest trim report
         uses: actions/upload-artifact@v5
@@ -110,3 +136,17 @@ jobs:
           name: manifest-overlay-${{ matrix.profile }}-${{ github.run_number }}
           path: .work/${{ matrix.profile }}/.repo/local_manifests/coreshift-overlay.xml
           if-no-files-found: error
+
+      - name: Package logs
+        if: always()
+        shell: bash
+        run: |
+          ./scripts/collect-build-logs.sh "${{ matrix.profile }}" "manifest" ".work/${{ matrix.profile }}" "dist/${{ matrix.profile }}"
+
+      - name: Upload log artifact
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: logs-${{ matrix.profile }}-manifest-${{ github.run_number }}
+          path: dist/${{ matrix.profile }}/logs/*.zip
+          if-no-files-found: warn

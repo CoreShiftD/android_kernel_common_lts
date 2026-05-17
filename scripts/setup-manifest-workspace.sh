@@ -68,6 +68,12 @@ PY
 
 mkdir -p "$WORKSPACE_DIR"
 WORKSPACE_DIR="$(cd "$WORKSPACE_DIR" && pwd)"
+if [ -n "${CORESHIFT_LOG_DIR:-}" ]; then
+  mkdir -p "$CORESHIFT_LOG_DIR"
+  manifest_workspace_log="$CORESHIFT_LOG_DIR/manifest-workspace.log"
+else
+  manifest_workspace_log=""
+fi
 
 repo_launcher_version() {
   local version_output=""
@@ -106,14 +112,38 @@ echo "  repo jobs: $CORESHIFT_REPO_JOBS"
 echo "  partial clone: $repo_partial_clone_label"
 echo "  clone filter: $CORESHIFT_REPO_CLONE_FILTER"
 echo "  workspace path: $WORKSPACE_DIR"
+if [ -n "$manifest_workspace_log" ]; then
+  {
+    echo "Workspace setup:"
+    echo "  repo launcher path: $(command -v repo)"
+    echo "  repo launcher version: $(repo_launcher_version)"
+    echo "  manifest branch: $MANIFEST_BRANCH"
+    echo "  kernel source branch: $KERNEL_SOURCE_BRANCH"
+    echo "  manifest overlay policy path: $MANIFEST_OVERLAY"
+    echo "  manifest overlay mode: $MANIFEST_OVERLAY_MODE"
+    echo "  repo jobs: $CORESHIFT_REPO_JOBS"
+    echo "  partial clone: $repo_partial_clone_label"
+    echo "  clone filter: $CORESHIFT_REPO_CLONE_FILTER"
+    echo "  workspace path: $WORKSPACE_DIR"
+  } > "$manifest_workspace_log"
+fi
 
 (
   cd "$WORKSPACE_DIR"
 
-  repo_init_log="$(mktemp)"
-  repo_sync_log="$(mktemp)"
+  if [ -n "${CORESHIFT_LOG_DIR:-}" ]; then
+    repo_init_log="$CORESHIFT_LOG_DIR/repo-init.log"
+    repo_sync_log="$CORESHIFT_LOG_DIR/repo-sync.log"
+    : > "$repo_init_log"
+    : > "$repo_sync_log"
+  else
+    repo_init_log="$(mktemp)"
+    repo_sync_log="$(mktemp)"
+  fi
   cleanup_logs() {
-    rm -f "$repo_init_log" "$repo_sync_log"
+    if [ -z "${CORESHIFT_LOG_DIR:-}" ]; then
+      rm -f "$repo_init_log" "$repo_sync_log"
+    fi
   }
   trap cleanup_logs EXIT
 
@@ -165,6 +195,14 @@ echo "  workspace path: $WORKSPACE_DIR"
 
   echo "  generated overlay manifest path: $OVERLAY_OUTPUT"
   echo "  manifest report path: $MANIFEST_TRIM_REPORT"
+  if [ -n "${CORESHIFT_LOG_DIR:-}" ]; then
+    cp "$OVERLAY_OUTPUT" "$CORESHIFT_LOG_DIR/coreshift-overlay.xml"
+    cp "$MANIFEST_TRIM_REPORT" "$CORESHIFT_LOG_DIR/manifest-trim-report.txt"
+    {
+      echo "generated overlay manifest path: $OVERLAY_OUTPUT"
+      echo "manifest report path: $MANIFEST_TRIM_REPORT"
+    } >> "$CORESHIFT_LOG_DIR/manifest-workspace.log"
+  fi
 
   repo_sync_base_args=(
     -c

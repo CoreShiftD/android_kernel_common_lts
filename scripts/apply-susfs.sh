@@ -21,6 +21,12 @@ FEATURES_FRAGMENT="$COMMON_DIR/features.fragment"
 SUSFS_DIR="$COMMON_DIR/SUSFS"
 SUSFS_REPO="${SUSFS_REPO:-https://gitlab.com/simonpunk/susfs4ksu.git}"
 SUSFS_REFS_CONFIG="$REPO_ROOT/configs/susfs-refs.json"
+if [ -n "${CORESHIFT_LOG_DIR:-}" ]; then
+  SUSFS_LOG_DIR="$CORESHIFT_LOG_DIR/patches/susfs"
+  mkdir -p "$SUSFS_LOG_DIR"
+else
+  SUSFS_LOG_DIR=""
+fi
 
 derive_profile_parts() {
   python3 - "$PROFILE_NAME" <<'PY'
@@ -190,15 +196,24 @@ ensure_line_once() {
 apply_patch_file() {
   local patch_file="$1"
   local patch_log
-  patch_log="$(mktemp)"
+  if [ -n "$SUSFS_LOG_DIR" ]; then
+    patch_log="$SUSFS_LOG_DIR/$(basename "$patch_file").log"
+    : > "$patch_log"
+  else
+    patch_log="$(mktemp)"
+  fi
   if (cd "$COMMON_DIR" && patch -p1 < "$patch_file") >"$patch_log" 2>&1; then
-    rm -f "$patch_log"
+    if [ -z "$SUSFS_LOG_DIR" ]; then
+      rm -f "$patch_log"
+    fi
     return 0
   fi
 
   echo "Failed to apply SUSFS patch: $patch_file" >&2
   sed -n '1,80p' "$patch_log" >&2
-  rm -f "$patch_log"
+  if [ -z "$SUSFS_LOG_DIR" ]; then
+    rm -f "$patch_log"
+  fi
   return 1
 }
 
@@ -268,6 +283,17 @@ for config_symbol in "${susfs_config_symbols[@]}"; do
 done
 
 susfs_commit="$(git -C "$SUSFS_DIR" rev-parse HEAD)"
+if [ -n "$SUSFS_LOG_DIR" ]; then
+  {
+    echo "SUSFS repo: $SUSFS_REPO"
+    echo "SUSFS ref: $RESOLVED_SUSFS_REF"
+    echo "SUSFS commit: $susfs_commit"
+    echo "SUSFS source path: $SUSFS_DIR"
+  } > "$SUSFS_LOG_DIR/susfs-source.txt"
+  for config_symbol in "${susfs_config_symbols[@]}"; do
+    echo "CONFIG_${config_symbol}=y"
+  done > "$SUSFS_LOG_DIR/susfs-config-symbols.txt"
+fi
 echo "SUSFS repo: $SUSFS_REPO"
 echo "SUSFS ref: $RESOLVED_SUSFS_REF"
 echo "SUSFS commit: $susfs_commit"

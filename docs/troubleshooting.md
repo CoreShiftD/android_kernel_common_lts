@@ -34,6 +34,14 @@ If expected SUSFS symbols are missing, verify the selected SUSFS branch/ref and 
 
 If `ksu-susfs-bbg` fails, test `ksu-susfs` first so SUSFS and BBG failures are isolated.
 
+## Build log artifacts
+
+Every build workflow uploads a separate CoreShift logs artifact next to the AK3 artifact. The log zip includes `build-kernel.log`, manifest reports, generated overlay XML, patch logs, generated fragments, selected profile/variant metadata, workspace diagnostics, and reject files when present.
+
+For SUSFS failures, inspect `patches/susfs/*.log`, `susfs-config-symbols.txt`, and any included `*.rej` files.
+
+For manifest policy issues, inspect `manifest-trim-report.txt` and `coreshift-overlay.xml`.
+
 ## `KSU_GIT_VERSION` warning
 
 CoreShift keeps `KernelSU/.git` during build on purpose so KernelSU version metadata remains available.

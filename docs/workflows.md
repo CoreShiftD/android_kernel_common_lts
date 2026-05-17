@@ -21,7 +21,8 @@
 
 ## Artifact behavior
 
-- GitHub Actions uploads AK3 zip artifacts only
+- GitHub Actions uploads AK3 zip artifacts and CoreShift log zip artifacts separately
+- Log artifacts include build command output, manifest reports, generated overlay XML, patch logs, generated fragments, and selected profile/variant metadata
 - The workflows do not upload raw workspace trees as normal build artifacts
 
 ## CI build environment
@@ -47,6 +48,7 @@ They support branch sync, repo validation, and manifest workspace validation rat
 - Tests manifest init, generated overlay creation, and repo sync only
 - Does not compile kernels
 - Does not package AK3
+- Uploads manifest log artifacts separately from manifest report and overlay artifacts
 - Has no mode input
 - Accepts `extra_remove_projects` only for temporary test runs
 - Stable keep/remove rules should be promoted into `manifests/overlays/<profile>.json` after a successful manifest test

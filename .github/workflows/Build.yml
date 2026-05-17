@@ -104,10 +104,31 @@ jobs:
           EOF_PRIVATE_FRAGMENT
           echo "Wrote workflow private.fragment"
 
+      - name: Prepare log metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG_DIR="$GITHUB_WORKSPACE/.logs/${{ inputs.profile }}/${{ inputs.variant }}"
+          mkdir -p "$LOG_DIR"
+          {
+            echo "workflow=${{ github.workflow }}"
+            echo "run_id=${{ github.run_id }}"
+            echo "run_number=${{ github.run_number }}"
+            echo "commit_sha=${{ github.sha }}"
+            echo "ref_name=${{ github.ref_name }}"
+            echo "profile=${{ inputs.profile }}"
+            echo "variant=${{ inputs.variant }}"
+            echo "runner_os=${{ runner.os }}"
+            date -u '+date_utc=%Y-%m-%dT%H:%M:%SZ'
+          } > "$LOG_DIR/metadata.txt"
+
       - name: Build kernel
         shell: bash
         run: |
           set -euo pipefail
+          LOG_DIR="$GITHUB_WORKSPACE/.logs/${{ inputs.profile }}/${{ inputs.variant }}"
+          mkdir -p "$LOG_DIR"
+          export CORESHIFT_LOG_DIR="$LOG_DIR"
 
           # This workflow is the beginner-friendly template.
           # Real build logic lives in scripts/build-kernel.sh.
@@ -157,11 +178,15 @@ jobs:
           ${{ inputs.build_env }}
           EOF_BUILD_ENV
 
+          set +e
           ./scripts/build-kernel.sh "${{ inputs.profile }}" \
             --variant "${{ inputs.variant }}" \
             --disable-defconfig-check "$defconfig_check_arg" \
             --disable-kmi-check "$kmi_check_arg" \
-            "${build_env_args[@]}"
+            "${build_env_args[@]}" 2>&1 | tee "$LOG_DIR/build-kernel.log"
+          status="${PIPESTATUS[0]}"
+          echo "$status" > "$LOG_DIR/build-exit-code.txt"
+          exit "$status"
 
       - name: Ccache stats after build
         if: always()
@@ -180,3 +205,17 @@ jobs:
           name: ak3-${{ inputs.profile }}-${{ github.run_number }}
           path: dist/${{ inputs.profile }}/*.zip
           if-no-files-found: error
+
+      - name: Package logs
+        if: always()
+        shell: bash
+        run: |
+          ./scripts/collect-build-logs.sh "${{ inputs.profile }}" "${{ inputs.variant }}" ".work/${{ inputs.profile }}" "dist/${{ inputs.profile }}"
+
+      - name: Upload log artifact
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: logs-${{ inputs.profile }}-${{ inputs.variant }}-${{ github.run_number }}
+          path: dist/${{ inputs.profile }}/logs/*.zip
+          if-no-files-found: warn
