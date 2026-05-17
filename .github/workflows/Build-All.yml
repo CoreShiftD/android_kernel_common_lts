@@ -3,6 +3,9 @@ name: Build all ACK/GKI profiles
 on:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
 
