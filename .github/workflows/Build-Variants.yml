@@ -60,18 +60,14 @@ jobs:
           echo "matrix=$matrix_json" >> "$GITHUB_OUTPUT"
           echo "count=$matrix_count" >> "$GITHUB_OUTPUT"
 
-          {
-            echo "### Build matrix"
-            echo
-            echo '```json'
-            echo "$matrix_json"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          matrix_file="$(mktemp)"
+          printf '%s\n' "$matrix_json" > "$matrix_file"
+          python3 scripts/write-matrix-summary.py "$matrix_file" >> "$GITHUB_STEP_SUMMARY"
 
   build:
     needs: resolve-matrix
     if: needs.resolve-matrix.outputs.count != '0'
-    name: build ${{ matrix.profile }} / ${{ matrix.variant }}
+    name: ${{ matrix.profile }} / ${{ matrix.variant }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
