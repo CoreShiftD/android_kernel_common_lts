@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <!-- Conservative default overlay. Future profile tuning can remove more projects after validation. -->
+  <remove-project name="kernel/common" />
+</manifest>

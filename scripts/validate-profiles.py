@@ -35,7 +35,7 @@ def fail(message: str) -> None:
     raise SystemExit(message)
 
 
-def validate_profile(path: Path) -> str:
+def validate_profile(path: Path, repo_root: Path) -> str:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -61,6 +61,27 @@ def validate_profile(path: Path) -> str:
     if lto is not None and lto not in VALID_LTO_VALUES:
         allowed = ", ".join(VALID_LTO_VALUES)
         fail(f"{path}: field 'lto' must be one of: {allowed}")
+
+    overlay_manifest = data.get("overlay_manifest")
+    if overlay_manifest is not None:
+        if not isinstance(overlay_manifest, str) or not overlay_manifest:
+            fail(f"{path}: field 'overlay_manifest' must be a non-empty string when present")
+        if not overlay_manifest.endswith(".xml"):
+            fail(f"{path}: field 'overlay_manifest' must end with .xml")
+        overlay_path = Path(overlay_manifest)
+        if overlay_path.is_absolute():
+            fail(f"{path}: field 'overlay_manifest' must be a repo-relative path under manifests/")
+        overlay_parts = overlay_path.parts
+        if not overlay_parts or overlay_parts[0] != "manifests":
+            fail(f"{path}: field 'overlay_manifest' must stay under manifests/")
+        resolved_overlay = (repo_root / overlay_path).resolve()
+        manifests_root = (repo_root / "manifests").resolve()
+        try:
+            resolved_overlay.relative_to(manifests_root)
+        except ValueError:
+            fail(f"{path}: field 'overlay_manifest' must stay under manifests/")
+        if not resolved_overlay.is_file():
+            fail(f"{path}: overlay_manifest file not found: {overlay_manifest}")
 
     name = data["name"]
     manifest_branch = data["manifest_branch"]
@@ -102,7 +123,7 @@ def main() -> int:
     if not files:
         fail(f"no profile JSON files found in {profiles_dir}")
 
-    seen = {validate_profile(path) for path in files}
+    seen = {validate_profile(path, repo_root) for path in files}
     expected = set(EXPECTED_BRANCHES)
 
     missing = sorted(expected - seen)

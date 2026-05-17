@@ -7,6 +7,7 @@ It is intended for repeatable ACK/GKI kernel builds and CI templates, not ROM bu
 ## Features
 
 - Manifest-based ACK workspace setup
+- Profile-specific manifest overlays and aggressive trim mode
 - Profile-driven branch and build backend selection
 - `google_build_sh` and Kleaf support
 - Private Kconfig fragment support

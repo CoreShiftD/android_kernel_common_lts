@@ -4,6 +4,7 @@ set -euo pipefail
 LOCAL_BIN="$HOME/.local/bin"
 LOCAL_REPO="$LOCAL_BIN/repo"
 REPO_LAUNCHER_URL="https://storage.googleapis.com/git-repo-downloads/repo"
+CORESHIFT_UPDATE_REPO_LAUNCHER="${CORESHIFT_UPDATE_REPO_LAUNCHER:-1}"
 
 APT_PACKAGES=(
   git
@@ -48,9 +49,11 @@ sudo apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"
 sudo apt-get install -y --no-install-recommends libncurses5 libtinfo5 || true
 sudo apt-get install -y --no-install-recommends libncurses6 libtinfo6 || true
 
-curl -fsSL "$REPO_LAUNCHER_URL" -o "$LOCAL_REPO"
-chmod +x "$LOCAL_REPO"
-hash -r
+if [ "$CORESHIFT_UPDATE_REPO_LAUNCHER" != "0" ]; then
+  curl -fsSL "$REPO_LAUNCHER_URL" -o "$LOCAL_REPO"
+  chmod +x "$LOCAL_REPO"
+  hash -r
+fi
 
 if [ -n "${GITHUB_PATH:-}" ]; then
   echo "$LOCAL_BIN" >> "$GITHUB_PATH"

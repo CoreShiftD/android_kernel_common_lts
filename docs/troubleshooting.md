@@ -37,3 +37,13 @@ If `ccache -s` shows no cacheable compiler calls:
 - Confirm the chosen repo/AOSP clang exists and is runnable
 - Confirm repeated builds are using the same profile, source revision, and relevant flags
 
+## Manifest trim failures
+
+If `repo sync` fails after aggressive manifest trimming, rerun with:
+
+```bash
+./scripts/build-kernel.sh android16-6.12-lts \
+  --build-env CORESHIFT_MANIFEST_TRIM=safe
+```
+
+If safe mode works, inspect `manifest-trim-report.txt` in the workspace root and restore the needed keep pattern before trying aggressive mode again.
