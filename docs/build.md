@@ -20,6 +20,9 @@ Build a profile with a variant:
 ./scripts/build-kernel.sh android12-5.10-lts --variant ksu-bbg
 ./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs
 ./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs-bbg
+./scripts/build-kernel.sh android12-5.4-lts --variant ksu
+./scripts/build-kernel.sh android12-5.4-lts --variant ksu-susfs
+./scripts/build-kernel.sh android12-5.4-lts --variant ksu-susfs-bbg
 ```
 
 Pin a SUSFS ref:
@@ -27,6 +30,20 @@ Pin a SUSFS ref:
 ```bash
 ./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs \
   --build-env SUSFS_REF=<branch-or-commit>
+```
+
+Pin MultiSU for a 5.4 KSU experiment:
+
+```bash
+./scripts/build-kernel.sh android12-5.4-lts --variant ksu \
+  --build-env MULTISU_REF=legacy
+```
+
+Override the 5.4 SUSFS patch:
+
+```bash
+./scripts/build-kernel.sh android12-5.4-lts --variant ksu-susfs \
+  --build-env SUSFS_PATCH_URLS=<url-or-local-path>
 ```
 
 ## `build-kernel.sh` usage
@@ -57,8 +74,10 @@ cp configs/fragments/private.fragment.example private.fragment
 
 - `LTO=full`
 - `KSU_REF=<commit-or-tag>`
+- `MULTISU_REF=<commit-or-tag>`
 - `BBG_REF=<commit-or-tag>`
 - `SUSFS_REF=<branch-or-commit>`
+- `SUSFS_PATCH_URLS=<url-or-local-path>`
 - `CORESHIFT_REPO_JOBS=2`
 - `CORESHIFT_REPO_PARTIAL_CLONE=0`
 - `CORESHIFT_REPO_CLONE_FILTER=blob:none`

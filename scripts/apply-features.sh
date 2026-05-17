@@ -97,7 +97,7 @@ if feature_requested "susfs" "${trimmed_features[@]}" &&
 fi
 
 if feature_requested "ksu" "${trimmed_features[@]}"; then
-  "$SCRIPT_DIR/apply-ksu.sh" "$WORKSPACE_DIR"
+  "$SCRIPT_DIR/apply-ksu.sh" "$WORKSPACE_DIR" "$PROFILE_NAME"
 fi
 
 if feature_requested "susfs" "${trimmed_features[@]}"; then

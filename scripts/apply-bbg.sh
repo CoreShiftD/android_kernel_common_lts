@@ -38,7 +38,7 @@ private_fragment = Path(sys.argv[1])
 features_fragment = Path(sys.argv[2])
 private_required = Path(sys.argv[3])
 gki_defconfig = Path(sys.argv[4])
-fallback_lsm = "lockdown,yama,loadpin,safesetid,integrity,selinux,smack,tomoyo,apparmor"
+default_lsm = "lockdown,yama,loadpin,safesetid,integrity,selinux,smack,tomoyo,apparmor"
 
 def parse_active_lsm(lines: list[str]) -> list[str]:
     for line in lines:
@@ -70,7 +70,7 @@ for candidate in (private_fragment, private_required, gki_defconfig):
     if source_lsm_tokens:
         break
 if not source_lsm_tokens:
-    source_lsm_tokens = fallback_lsm.split(",")
+    source_lsm_tokens = default_lsm.split(",")
 
 fragment_lines = features_fragment.read_text(encoding="utf-8").splitlines()
 updated_lines: list[str] = []

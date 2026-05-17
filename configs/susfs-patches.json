@@ -1,0 +1,18 @@
+{
+  "profiles": {
+    "android11-5.4-lts": {
+      "patches": [
+        "https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/Patch/susfs_patch_to_5.4.patch"
+      ],
+      "ksu_patches": [],
+      "copy": []
+    },
+    "android12-5.4-lts": {
+      "patches": [
+        "https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/Patch/susfs_patch_to_5.4.patch"
+      ],
+      "ksu_patches": [],
+      "copy": []
+    }
+  }
+}

@@ -48,8 +48,8 @@ cp configs/fragments/private.fragment.example private.fragment
 
 | Profile | LTO | Variants |
 | --- | --- | --- |
-| `android11-5.4-lts` | `full` | `vanilla`, `bbg` |
-| `android12-5.4-lts` | `full` | `vanilla`, `bbg` |
+| `android11-5.4-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
+| `android12-5.4-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
 | `android12-5.10-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
 | `android13-5.10-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
 | `android13-5.15-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
@@ -75,5 +75,7 @@ cp configs/fragments/private.fragment.example private.fragment
 CoreShift builds ACK/GKI kernel artifacts and AnyKernel3 zip outputs.
 
 - Device-specific `boot.img` or `vendor_boot.img` packaging remains separate.
+- 5.4 KSU variants are experimental and use MultiSU legacy as the KSU provider.
 - SUSFS is experimental and only available through KernelSU variants.
+- 4.9 and 4.19 legacy/device-kernel branches are intentionally out of scope for this matrix for now.
 - This is not a ROM builder.

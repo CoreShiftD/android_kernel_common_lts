@@ -37,10 +37,9 @@ dist/<profile>/<kernel-version>-<suffixes>.zip
 ## Requirements and behavior
 
 - Packaging requires a raw `Image`
-- `Image.gz` or `Image.lz4` are not repacked as a fallback
+- `Image.gz` or `Image.lz4` are not repacked as an alternate path
 - `--skip-ak3` disables AnyKernel3 packaging
 
 ## CI artifact uploads
 
 The GitHub Actions build workflows upload only the generated AnyKernel3 zip artifacts.
-

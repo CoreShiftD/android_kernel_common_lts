@@ -3,26 +3,83 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/apply-ksu.sh <workspace-dir>
+Usage: scripts/apply-ksu.sh <workspace-dir> [profile-name]
 EOF
 }
 
-if [ "$#" -ne 1 ]; then
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
   usage >&2
   exit 1
 fi
 
 WORKSPACE_DIR="$1"
+PROFILE_NAME="${2:-$(basename "$WORKSPACE_DIR")}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMMON_DIR="$WORKSPACE_DIR/common"
 FEATURES_FRAGMENT="$COMMON_DIR/features.fragment"
 KSU_DIR="$COMMON_DIR/KernelSU"
-KSU_REPO="${KSU_REPO:-https://github.com/tiann/KernelSU.git}"
-KSU_REF="${KSU_REF:-main}"
+KSU_PROVIDERS_CONFIG="$REPO_ROOT/configs/ksu-providers.json"
 if [ -n "${CORESHIFT_LOG_DIR:-}" ]; then
   KSU_LOG_DIR="$CORESHIFT_LOG_DIR/patches/ksu"
   mkdir -p "$KSU_LOG_DIR"
 else
   KSU_LOG_DIR=""
+fi
+
+requested_ksu_provider="${KSU_PROVIDER:-}"
+mapfile -t provider_fields < <(
+  python3 - "$KSU_PROVIDERS_CONFIG" "$PROFILE_NAME" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+profile = sys.argv[2]
+data = json.loads(path.read_text(encoding="utf-8"))
+default = data.get("default", {})
+selected = dict(default)
+selected.update(data.get("profiles", {}).get(profile, {}))
+print(selected.get("provider", "kernelsu"))
+print(selected.get("repo", "https://github.com/tiann/KernelSU.git"))
+print(selected.get("ref", "main"))
+PY
+)
+
+KSU_PROVIDER="${requested_ksu_provider:-${provider_fields[0]}}"
+case "$KSU_PROVIDER" in
+  kernelsu|multisu) ;;
+  *)
+    echo "Unsupported KSU provider: $KSU_PROVIDER" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$KSU_PROVIDER" = "multisu" ]; then
+  if [ -z "${MULTISU_REPO:-}" ] && [ -n "${KSU_REPO:-}" ] && [ "$requested_ksu_provider" = "multisu" ]; then
+    export MULTISU_REPO="$KSU_REPO"
+  fi
+  if [ -z "${MULTISU_REF:-}" ] && [ -n "${KSU_REF:-}" ]; then
+    export MULTISU_REF="$KSU_REF"
+  fi
+  if [ "${provider_fields[0]}" = "multisu" ]; then
+    MULTISU_REPO="${MULTISU_REPO:-${provider_fields[1]}}"
+    MULTISU_REF="${MULTISU_REF:-${provider_fields[2]}}"
+  else
+    MULTISU_REPO="${MULTISU_REPO:-https://github.com/xxblebleblexx/MultiSU.git}"
+    MULTISU_REF="${MULTISU_REF:-legacy}"
+  fi
+  export MULTISU_REPO MULTISU_REF
+  "$SCRIPT_DIR/apply-multisu.sh" "$WORKSPACE_DIR" "$PROFILE_NAME"
+  exit 0
+fi
+
+if [ "${provider_fields[0]}" = "kernelsu" ]; then
+  KSU_REPO="${KSU_REPO:-${provider_fields[1]}}"
+  KSU_REF="${KSU_REF:-${provider_fields[2]}}"
+else
+  KSU_REPO="${KSU_REPO:-https://github.com/tiann/KernelSU.git}"
+  KSU_REF="${KSU_REF:-main}"
 fi
 
 ensure_line_once() {

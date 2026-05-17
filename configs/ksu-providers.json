@@ -1,0 +1,19 @@
+{
+  "default": {
+    "provider": "kernelsu",
+    "repo": "https://github.com/tiann/KernelSU.git",
+    "ref": "main"
+  },
+  "profiles": {
+    "android11-5.4-lts": {
+      "provider": "multisu",
+      "repo": "https://github.com/xxblebleblexx/MultiSU.git",
+      "ref": "legacy"
+    },
+    "android12-5.4-lts": {
+      "provider": "multisu",
+      "repo": "https://github.com/xxblebleblexx/MultiSU.git",
+      "ref": "legacy"
+    }
+  }
+}

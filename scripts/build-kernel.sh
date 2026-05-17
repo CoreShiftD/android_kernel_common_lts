@@ -435,10 +435,15 @@ for passthrough_key in \
   CORESHIFT_REPO_NO_VERIFY \
   BBG_REPO \
   BBG_REF \
+  KSU_PROVIDER \
   KSU_REPO \
   KSU_REF \
+  MULTISU_REPO \
+  MULTISU_REF \
+  SUSFS_PATCH_DIR \
   SUSFS_REPO \
   SUSFS_REF \
+  SUSFS_PATCH_URLS \
   USE_CCACHE
 do
   append_passthrough_build_env_if_unset "$passthrough_key"
@@ -503,7 +508,7 @@ if [ "$SELECTED_MODE" = "google_build_sh" ]; then
   EFFECTIVE_JOBS="$(get_build_env_value "CORESHIFT_JOBS")"
 fi
 
-for feature_env_key in BBG_REPO BBG_REF KSU_REPO KSU_REF SUSFS_REPO SUSFS_REF; do
+for feature_env_key in BBG_REPO BBG_REF KSU_PROVIDER KSU_REPO KSU_REF MULTISU_REPO MULTISU_REF SUSFS_PATCH_DIR SUSFS_REPO SUSFS_REF SUSFS_PATCH_URLS; do
   if has_build_env_key "$feature_env_key"; then
     export "$feature_env_key=$(get_build_env_value "$feature_env_key")"
   fi

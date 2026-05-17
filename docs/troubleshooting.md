@@ -20,19 +20,41 @@ If you hand-edit fragment inputs around BBG, do not remove that token from the e
 
 ## KSU on 5.4
 
-5.4 does not enable KSU by default because current KernelSU `main` includes `linux/pgtable.h`, which is missing on the tested 5.4 ACK common trees.
+5.4 KSU variants are experimental and use MultiSU legacy as the KSU provider.
+
+For MultiSU setup or link failures, check that `drivers/kernelsu` points to `../MultiSU/kernel`, `drivers/Kconfig` contains `source "drivers/kernelsu/Kconfig"`, and `common/features.fragment` contains `CONFIG_KSU=y`.
+
+Use `MULTISU_REF` to pin a known-good MultiSU branch or commit.
 
 ## SUSFS
 
 SUSFS requires KernelSU. Use `ksu-susfs` or `ksu-susfs-bbg`; a raw `susfs` feature without `ksu` is rejected.
 
-If SUSFS patching fails, check for patch rejects, a wrong branch/ref, or a missing `CONFIG_KSU_SUSFS` symbol after patching. Pin a known-good Simonpunk ref with `SUSFS_REF` when automatic branch resolution picks no compatible branch.
+SUSFS integration follows the old CoreShift-GKI phase order while using the Simonpunk branch layout:
 
-CoreShift scans the selected Simonpunk patch files and resulting Kconfig files, then writes every discovered `KSU_SUSFS*` symbol to `common/features.fragment`. SUSFS config is variant-owned, not part of `configs/fragments/coreshift.fragment` or repo-root `private.fragment`.
+1. Copy `fs/susfs.c` and `include/linux/susfs*.h`
+2. Apply the core SUSFS patch from `common/`
+3. Locate the integrated KSU root through `*/kernel/include/ksu.h`
+4. Apply `KernelSU/10_enable_susfs_for_ksu.patch` from that KSU root
+5. Scan selected SUSFS patches and resulting tree Kconfig files for `KSU_SUSFS*`
 
-If expected SUSFS symbols are missing, verify the selected SUSFS branch/ref and patch set. Use `SUSFS_REF` to pin a known-good Simonpunk branch/ref.
+CoreShift scans the selected SUSFS patch files and resulting Kconfig files, then writes every discovered `KSU_SUSFS*` symbol to `common/features.fragment`. SUSFS config is variant-owned, not part of `configs/fragments/coreshift.fragment` or repo-root `private.fragment`.
+
+If no KSU root is found, KernelSU or MultiSU integration failed before SUSFS.
+
+If no `KSU_SUSFS*` symbols are found, the KernelSU SUSFS patch did not apply or the wrong Simonpunk patch set was selected. CoreShift aborts in that case and never injects `CONFIG_KSU_SUSFS` by itself.
+
+If the core SUSFS patch fails, the selected profile source does not match the chosen SUSFS patch set.
+
+If the KernelSU SUSFS patch fails, the selected KSU provider tree does not match the selected Simonpunk patch set.
+
+Use `SUSFS_REF` to pin a known-good Simonpunk branch or commit when automatic branch resolution picks no compatible branch.
 
 If `ksu-susfs-bbg` fails, test `ksu-susfs` first so SUSFS and BBG failures are isolated.
+
+For 5.4 SUSFS patch rejects or missing `KSU_SUSFS*` symbols, check `patches/susfs/*.log`, any included `*.rej` files, and `susfs-config-symbols.txt`. Use `SUSFS_PATCH_URLS` to pin or override experimental 5.4 SUSFS patches, and add `ksu_patches` in `configs/susfs-patches.json` if the external 5.4 patch set needs a separate KSU-side patch.
+
+4.9 and 4.19 legacy/device-kernel branches are intentionally out of scope for this matrix for now. Keep MultiSU and SUSFS experiments limited to the existing 5.4 profiles.
 
 ## Build log artifacts
 
