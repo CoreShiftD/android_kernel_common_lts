@@ -437,6 +437,8 @@ for passthrough_key in \
   BBG_REF \
   KSU_REPO \
   KSU_REF \
+  SUSFS_REPO \
+  SUSFS_REF \
   USE_CCACHE
 do
   append_passthrough_build_env_if_unset "$passthrough_key"
@@ -501,7 +503,7 @@ if [ "$SELECTED_MODE" = "google_build_sh" ]; then
   EFFECTIVE_JOBS="$(get_build_env_value "CORESHIFT_JOBS")"
 fi
 
-for feature_env_key in BBG_REPO BBG_REF KSU_REPO KSU_REF; do
+for feature_env_key in BBG_REPO BBG_REF KSU_REPO KSU_REF SUSFS_REPO SUSFS_REF; do
   if has_build_env_key "$feature_env_key"; then
     export "$feature_env_key=$(get_build_env_value "$feature_env_key")"
   fi
@@ -525,7 +527,7 @@ if [ "$is_54_profile" -eq 1 ]; then
   fi
 fi
 
-"$REPO_ROOT/scripts/apply-features.sh" "$WORKSPACE_DIR" "$CORESHIFT_FEATURES_VALUE"
+"$REPO_ROOT/scripts/apply-features.sh" "$WORKSPACE_DIR" "$CORESHIFT_FEATURES_VALUE" "$PROFILE_NAME"
 
 if [ "$DISABLE_DEFCONFIG_CHECK" = "on" ]; then
   "$REPO_ROOT/scripts/disable-defconfig-check.sh" "$WORKSPACE_DIR"

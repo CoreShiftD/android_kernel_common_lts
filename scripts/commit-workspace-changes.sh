@@ -60,7 +60,10 @@ if [ "${#nested_git_paths[@]}" -gt 0 ]; then
       "$COMMON_DIR/Baseband-guard/.git")
         echo "Keeping Baseband-guard/.git for BBG version metadata during build." >&2
         ;;
-      "$COMMON_DIR/Baseband-guard/"*"/.git"|"$COMMON_DIR/KernelSU/"*"/.git")
+      "$COMMON_DIR/SUSFS/.git")
+        echo "Keeping SUSFS/.git for SUSFS source metadata during build." >&2
+        ;;
+      "$COMMON_DIR/Baseband-guard/"*"/.git"|"$COMMON_DIR/KernelSU/"*"/.git"|"$COMMON_DIR/SUSFS/"*"/.git")
         unexpected_nested_git+=("$nested_git_path")
         ;;
       *)
@@ -80,7 +83,8 @@ git -C "$COMMON_DIR" add -A -- . \
   ":(exclude)dist/" \
   ":(exclude).packaging/" \
   ":(exclude)KernelSU/" \
-  ":(exclude)Baseband-guard/"
+  ":(exclude)Baseband-guard/" \
+  ":(exclude)SUSFS/"
 
 staged_raw_diff="$(git -C "$COMMON_DIR" diff --cached --raw)"
 if printf '%s\n' "$staged_raw_diff" | grep -Eq '(^|[[:space:]])160000[[:space:]]+160000[[:space:]]|(^|[[:space:]])160000[[:space:]]+[0-7]{6}[[:space:]]|(^|[[:space:]])[0-7]{6}[[:space:]]+160000[[:space:]]'; then

@@ -22,6 +22,18 @@ If you hand-edit fragment inputs around BBG, do not remove that token from the e
 
 5.4 does not enable KSU by default because current KernelSU `main` includes `linux/pgtable.h`, which is missing on the tested 5.4 ACK common trees.
 
+## SUSFS
+
+SUSFS requires KernelSU. Use `ksu-susfs` or `ksu-susfs-bbg`; a raw `susfs` feature without `ksu` is rejected.
+
+If SUSFS patching fails, check for patch rejects, a wrong branch/ref, or a missing `CONFIG_KSU_SUSFS` symbol after patching. Pin a known-good Simonpunk ref with `SUSFS_REF` when automatic branch resolution picks no compatible branch.
+
+CoreShift scans the selected Simonpunk patch files and resulting Kconfig files, then writes every discovered `KSU_SUSFS*` symbol to `common/features.fragment`. SUSFS config is variant-owned, not part of `configs/fragments/coreshift.fragment` or repo-root `private.fragment`.
+
+If expected SUSFS symbols are missing, verify the selected SUSFS branch/ref and patch set. Use `SUSFS_REF` to pin a known-good Simonpunk branch/ref.
+
+If `ksu-susfs-bbg` fails, test `ksu-susfs` first so SUSFS and BBG failures are isolated.
+
 ## `KSU_GIT_VERSION` warning
 
 CoreShift keeps `KernelSU/.git` during build on purpose so KernelSU version metadata remains available.

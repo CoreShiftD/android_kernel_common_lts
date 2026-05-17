@@ -12,7 +12,7 @@ It is intended for repeatable ACK/GKI kernel builds and CI templates, not ROM bu
 - `google_build_sh` and Kleaf support
 - Private Kconfig fragment support
 - Profile-aware LTO
-- Optional BBG and KernelSU variants
+- Optional BBG, KernelSU, and KernelSU SUSFS variants
 - AnyKernel3 packaging
 - GitHub Actions templates
 
@@ -50,13 +50,13 @@ cp configs/fragments/private.fragment.example private.fragment
 | --- | --- | --- |
 | `android11-5.4-lts` | `full` | `vanilla`, `bbg` |
 | `android12-5.4-lts` | `full` | `vanilla`, `bbg` |
-| `android12-5.10-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg` |
-| `android13-5.10-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg` |
-| `android13-5.15-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg` |
-| `android14-5.15-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg` |
-| `android14-6.1-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg` |
-| `android15-6.6-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg` |
-| `android16-6.12-lts` | `thin` | `vanilla`, `bbg`, `ksu`, `ksu-bbg` |
+| `android12-5.10-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
+| `android13-5.10-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
+| `android13-5.15-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
+| `android14-5.15-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
+| `android14-6.1-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
+| `android15-6.6-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
+| `android16-6.12-lts` | `thin` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
 
 ## Documentation
 
@@ -75,5 +75,5 @@ cp configs/fragments/private.fragment.example private.fragment
 CoreShift builds ACK/GKI kernel artifacts and AnyKernel3 zip outputs.
 
 - Device-specific `boot.img` or `vendor_boot.img` packaging remains separate.
-- SUSFS is not implemented yet.
+- SUSFS is experimental and only available through KernelSU variants.
 - This is not a ROM builder.

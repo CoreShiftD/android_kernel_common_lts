@@ -18,6 +18,15 @@ Build a profile with a variant:
 
 ```bash
 ./scripts/build-kernel.sh android12-5.10-lts --variant ksu-bbg
+./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs
+./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs-bbg
+```
+
+Pin a SUSFS ref:
+
+```bash
+./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs \
+  --build-env SUSFS_REF=<branch-or-commit>
 ```
 
 ## `build-kernel.sh` usage
@@ -49,6 +58,7 @@ cp configs/fragments/private.fragment.example private.fragment
 - `LTO=full`
 - `KSU_REF=<commit-or-tag>`
 - `BBG_REF=<commit-or-tag>`
+- `SUSFS_REF=<branch-or-commit>`
 - `CORESHIFT_REPO_JOBS=2`
 - `CORESHIFT_REPO_PARTIAL_CLONE=0`
 - `CORESHIFT_REPO_CLONE_FILTER=blob:none`
@@ -89,4 +99,3 @@ For memory-heavy local builds:
 ```bash
 ./scripts/add-swap.sh 24
 ```
-

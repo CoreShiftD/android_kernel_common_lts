@@ -28,6 +28,8 @@ on:
           - bbg
           - ksu
           - ksu-bbg
+          - ksu-susfs
+          - ksu-susfs-bbg
       private_fragment:
         description: "Optional Kconfig fragment content layered last. Leave empty for defaults."
         required: false
