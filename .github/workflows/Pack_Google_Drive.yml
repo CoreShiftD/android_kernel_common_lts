@@ -7,20 +7,29 @@ on:
         description: "Release tag"
         required: true
         default: "rom-port-images"
-      system_url:
-        description: "Google Drive/direct link for system.img"
-        required: false
-      product_url:
-        description: "Google Drive/direct link for product.img"
-        required: false
-      system_ext_url:
-        description: "Google Drive/direct link for system_ext.img"
-        required: false
-      vendor_url:
-        description: "Google Drive/direct link for vendor.img"
-        required: false
+
       extra_tag:
-        description: "Optional suffix"
+        description: "Optional suffix, for example inoi-advan-test1"
+        required: false
+        default: ""
+
+      system_url:
+        description: "Google Drive/direct link for system image"
+        required: false
+        default: ""
+
+      product_url:
+        description: "Google Drive/direct link for product image"
+        required: false
+        default: ""
+
+      system_ext_url:
+        description: "Google Drive/direct link for system_ext image"
+        required: false
+        default: ""
+
+      vendor_url:
+        description: "Google Drive/direct link for vendor image"
         required: false
         default: ""
 
@@ -38,9 +47,19 @@ jobs:
       - name: Install tools
         run: |
           set -euo pipefail
+
           sudo apt-get update
-          sudo apt-get install -y curl xz-utils tar coreutils python3-pip
-          python3 -m pip install --user --break-system-packages gdown
+          sudo apt-get install -y \
+            curl \
+            tar \
+            xz-utils \
+            coreutils \
+            python3 \
+            python3-pip
+
+          python3 -m pip install --user -U gdown || \
+          python3 -m pip install --user --break-system-packages -U gdown
+
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Download images
@@ -54,23 +73,57 @@ jobs:
 
           mkdir -p images out
 
-          download_file() {
-            local name="$1"
-            local url="$2"
-            local out="images/${name}.img"
+          drive_id_from_url() {
+            local url="$1"
+            local id=""
 
-            if [ -z "$url" ]; then
-              echo "Skipping $name: no URL provided"
-              return 0
+            # Format:
+            # https://drive.google.com/file/d/<ID>/view
+            id="$(echo "$url" | sed -nE 's#.*\/d\/([^/]+).*#\1#p')"
+
+            # Format:
+            # https://drive.google.com/open?id=<ID>
+            # https://drive.google.com/uc?id=<ID>
+            if [ -z "$id" ]; then
+              id="$(echo "$url" | sed -nE 's#.*[?&]id=([^&]+).*#\1#p')"
             fi
 
-            echo "Downloading $name -> $out"
+            echo "$id"
+          }
 
-            if echo "$url" | grep -q "drive.google.com"; then
-              gdown --fuzzy --continue "$url" -O "$out"
+          browser_curl_drive() {
+            local file_id="$1"
+            local out="$2"
+            local cookie="/tmp/gdrive.cookie"
+            local html="/tmp/gdrive.html"
+
+            rm -f "$cookie" "$html"
+
+            curl -L \
+              -A "Mozilla/5.0" \
+              -c "$cookie" \
+              "https://drive.google.com/uc?export=download&id=${file_id}" \
+              -o "$html"
+
+            confirm="$(
+              grep -oE 'confirm=[0-9A-Za-z_-]+' "$html" \
+                | head -n1 \
+                | cut -d= -f2 || true
+            )"
+
+            if [ -n "$confirm" ]; then
+              curl -L \
+                -A "Mozilla/5.0" \
+                -b "$cookie" \
+                "https://drive.google.com/uc?export=download&confirm=${confirm}&id=${file_id}" \
+                -o "$out"
             else
-              curl -L --fail --retry 5 --retry-delay 5 "$url" -o "$out"
+              mv "$html" "$out"
             fi
+          }
+
+          validate_download() {
+            local out="$1"
 
             if [ ! -f "$out" ]; then
               echo "ERROR: $out was not created"
@@ -84,13 +137,56 @@ jobs:
               exit 1
             fi
 
-            if head -c 512 "$out" | grep -qiE '<html|<!doctype html|Google Drive|quota exceeded|virus scan'; then
+            if head -c 1024 "$out" | grep -qiE '<html|<!doctype html|Google Drive|quota exceeded|virus scan|Sign in'; then
               echo "ERROR: $out looks like an HTML/Google Drive error page, not an image"
-              echo "Make sure the Drive file is public or use a direct downloadable link."
+              echo "Make sure the Google Drive file is public/shareable."
               exit 1
             fi
 
-            echo "OK: $out size=$size"
+            echo "OK: $out size=$size bytes"
+          }
+
+          download_file() {
+            local name="$1"
+            local url="$2"
+            local out="images/${name}.img"
+
+            if [ -z "$url" ]; then
+              echo "Skipping $name: no URL provided"
+              return 0
+            fi
+
+            echo
+            echo "Downloading $name -> $out"
+
+            if echo "$url" | grep -q "drive.google.com"; then
+              file_id="$(drive_id_from_url "$url")"
+
+              if [ -z "$file_id" ]; then
+                echo "ERROR: Could not parse Google Drive file ID from:"
+                echo "$url"
+                exit 1
+              fi
+
+              echo "Google Drive file ID: $file_id"
+
+              if gdown --continue "$file_id" -O "$out"; then
+                echo "gdown download finished"
+              else
+                echo "gdown failed, trying browser-like curl fallback..."
+                browser_curl_drive "$file_id" "$out"
+              fi
+            else
+              curl -L \
+                --fail \
+                --retry 5 \
+                --retry-delay 5 \
+                -A "Mozilla/5.0" \
+                "$url" \
+                -o "$out"
+            fi
+
+            validate_download "$out"
           }
 
           download_file "system" "$SYSTEM_URL"
@@ -98,11 +194,22 @@ jobs:
           download_file "system_ext" "$SYSTEM_EXT_URL"
           download_file "vendor" "$VENDOR_URL"
 
-      - name: List and hash images
+      - name: Show downloaded images
         run: |
           set -euo pipefail
-          ls -lh images
-          sha256sum images/* > out/SHA256SUMS.txt
+
+          echo "Downloaded files:"
+          ls -lh images || true
+
+          if ! ls images/*.img >/dev/null 2>&1; then
+            echo "ERROR: no images were downloaded"
+            exit 1
+          fi
+
+          sha256sum images/*.img > out/SHA256SUMS.txt
+
+          echo
+          echo "SHA256:"
           cat out/SHA256SUMS.txt
 
       - name: Pack tar.xz
@@ -113,13 +220,14 @@ jobs:
           set -euo pipefail
 
           TAG="$RELEASE_TAG"
+
           if [ -n "$EXTRA_TAG" ]; then
             TAG="${TAG}-${EXTRA_TAG}"
           fi
 
           ARCHIVE="out/${TAG}.tar.xz"
 
-          echo "Creating $ARCHIVE with xz -9e..."
+          echo "Creating archive: $ARCHIVE"
           tar -I 'xz -9e -T0' -cf "$ARCHIVE" images
 
           sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
@@ -127,9 +235,10 @@ jobs:
           echo "TAG=$TAG" >> "$GITHUB_ENV"
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
+          echo
           ls -lh out
 
-      - name: Upload artifact
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.TAG }}
@@ -140,15 +249,18 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-      - name: Publish GitHub Release
+      - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
+          echo "Publishing release: $TAG"
+          echo "Repo: $GH_REPO"
+
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo "Release exists. Uploading assets..."
+            echo "Release exists, uploading assets..."
             gh release upload "$TAG" \
               "$ARCHIVE" \
               "${ARCHIVE}.sha256" \
@@ -156,7 +268,7 @@ jobs:
               --repo "$GH_REPO" \
               --clobber
           else
-            echo "Creating release $TAG..."
+            echo "Creating release..."
             gh release create "$TAG" \
               "$ARCHIVE" \
               "${ARCHIVE}.sha256" \
