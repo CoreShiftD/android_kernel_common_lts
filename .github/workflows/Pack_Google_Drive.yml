@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag / archive tag"
+        description: "Release tag"
         required: true
         default: "rom-port-images"
       system_url:
@@ -20,7 +20,7 @@ on:
         description: "Google Drive/direct link for vendor.img"
         required: false
       extra_tag:
-        description: "Optional extra name suffix"
+        description: "Optional suffix"
         required: false
         default: ""
 
@@ -32,12 +32,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Prepare
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y curl xz-utils tar coreutils
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-          mkdir -p images out
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y curl xz-utils tar coreutils python3-pip
+          python3 -m pip install --user --break-system-packages gdown
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Download images
         env:
@@ -47,6 +51,8 @@ jobs:
           VENDOR_URL: ${{ inputs.vendor_url }}
         run: |
           set -euo pipefail
+
+          mkdir -p images out
 
           download_file() {
             local name="$1"
@@ -58,54 +64,33 @@ jobs:
               return 0
             fi
 
-            echo "Downloading $name..."
+            echo "Downloading $name -> $out"
 
-            # Google Drive share link support
             if echo "$url" | grep -q "drive.google.com"; then
-              file_id="$(
-                echo "$url" | sed -nE 's#.*\/d\/([^/]+).*#\1#p'
-              )"
-
-              if [ -z "$file_id" ]; then
-                file_id="$(
-                  echo "$url" | sed -nE 's#.*[?&]id=([^&]+).*#\1#p'
-                )"
-              fi
-
-              if [ -z "$file_id" ]; then
-                echo "Could not parse Google Drive file ID from: $url"
-                exit 1
-              fi
-
-              cookie="/tmp/gdrive-${name}.cookie"
-
-              curl -L -c "$cookie" \
-                "https://drive.google.com/uc?export=download&id=${file_id}" \
-                -o "/tmp/${name}.html"
-
-              confirm="$(
-                grep -o 'confirm=[^;&]*' "/tmp/${name}.html" | head -n1 | cut -d= -f2 || true
-              )"
-
-              if [ -n "$confirm" ]; then
-                curl -L -b "$cookie" \
-                  "https://drive.google.com/uc?export=download&confirm=${confirm}&id=${file_id}" \
-                  -o "$out"
-              else
-                mv "/tmp/${name}.html" "$out"
-              fi
+              gdown --fuzzy --continue "$url" -O "$out"
             else
               curl -L --fail --retry 5 --retry-delay 5 "$url" -o "$out"
             fi
 
-            size="$(wc -c < "$out")"
+            if [ ! -f "$out" ]; then
+              echo "ERROR: $out was not created"
+              exit 1
+            fi
+
+            size="$(wc -c < "$out" | tr -d ' ')"
 
             if [ "$size" = "0" ]; then
               echo "ERROR: $out is 0 bytes"
               exit 1
             fi
 
-            echo "$name downloaded: $size bytes"
+            if head -c 512 "$out" | grep -qiE '<html|<!doctype html|Google Drive|quota exceeded|virus scan'; then
+              echo "ERROR: $out looks like an HTML/Google Drive error page, not an image"
+              echo "Make sure the Drive file is public or use a direct downloadable link."
+              exit 1
+            fi
+
+            echo "OK: $out size=$size"
           }
 
           download_file "system" "$SYSTEM_URL"
@@ -113,11 +98,12 @@ jobs:
           download_file "system_ext" "$SYSTEM_EXT_URL"
           download_file "vendor" "$VENDOR_URL"
 
-      - name: Show downloaded files
+      - name: List and hash images
         run: |
-          set -e
+          set -euo pipefail
           ls -lh images
           sha256sum images/* > out/SHA256SUMS.txt
+          cat out/SHA256SUMS.txt
 
       - name: Pack tar.xz
         env:
@@ -138,8 +124,8 @@ jobs:
 
           sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
 
-          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
           echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
           ls -lh out
 
@@ -157,15 +143,17 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             echo "Release exists. Uploading assets..."
             gh release upload "$TAG" \
               "$ARCHIVE" \
               "${ARCHIVE}.sha256" \
               out/SHA256SUMS.txt \
+              --repo "$GH_REPO" \
               --clobber
           else
             echo "Creating release $TAG..."
@@ -173,6 +161,7 @@ jobs:
               "$ARCHIVE" \
               "${ARCHIVE}.sha256" \
               out/SHA256SUMS.txt \
+              --repo "$GH_REPO" \
               --title "$TAG" \
               --notes "Packed ROM images from workflow inputs."
           fi
