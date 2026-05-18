@@ -77,13 +77,8 @@ jobs:
             local url="$1"
             local id=""
 
-            # Format:
-            # https://drive.google.com/file/d/<ID>/view
             id="$(echo "$url" | sed -nE 's#.*\/d\/([^/]+).*#\1#p')"
 
-            # Format:
-            # https://drive.google.com/open?id=<ID>
-            # https://drive.google.com/uc?id=<ID>
             if [ -z "$id" ]; then
               id="$(echo "$url" | sed -nE 's#.*[?&]id=([^&]+).*#\1#p')"
             fi
@@ -225,27 +220,122 @@ jobs:
             TAG="${TAG}-${EXTRA_TAG}"
           fi
 
-          ARCHIVE="out/${TAG}.tar.xz"
+          mkdir -p out/release-assets
 
-          echo "Creating archive: $ARCHIVE"
-          tar -I 'xz -9e -T0' -cf "$ARCHIVE" images
+          cp out/SHA256SUMS.txt out/release-assets/SHA256SUMS.original-images.txt
 
-          sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
+          check_size_under_release_limit() {
+            local file="$1"
+            local limit=$((1900 * 1024 * 1024))
+            local size
+
+            size="$(wc -c < "$file" | tr -d ' ')"
+
+            echo "Size: $file = $size bytes"
+
+            if [ "$size" -gt "$limit" ]; then
+              echo "ERROR: $file is larger than 1900 MiB."
+              echo "GitHub release assets have a practical 2 GiB limit."
+              echo "Use smaller groups or split this archive."
+              exit 1
+            fi
+          }
+
+          pack_archive() {
+            local name="$1"
+            shift
+
+            local files=()
+
+            for f in "$@"; do
+              if [ -f "images/$f" ]; then
+                files+=("$f")
+              else
+                echo "Skipping missing $f"
+              fi
+            done
+
+            if [ "${#files[@]}" -eq 0 ]; then
+              echo "No files for $name, skipping archive"
+              return 0
+            fi
+
+            local archive="out/release-assets/${TAG}-${name}.tar.xz"
+
+            echo
+            echo "Creating archive: $archive"
+            echo "Included:"
+            printf '  - %s\n' "${files[@]}"
+
+            tar -C images -I 'xz -9e -T0' -cf "$archive" "${files[@]}"
+
+            check_size_under_release_limit "$archive"
+            sha256sum "$archive" > "${archive}.sha256"
+          }
+
+          IMAGE_COUNT="$(find images -maxdepth 1 -type f -name '*.img' | wc -l | tr -d ' ')"
+
+          echo "Image count: $IMAGE_COUNT"
+
+          if [ "$IMAGE_COUNT" -gt 2 ]; then
+            echo "More than 2 partitions detected."
+            echo "Packing as grouped archives:"
+            echo "  system + system_ext"
+            echo "  product + vendor"
+
+            pack_archive "system_system_ext" \
+              system.img \
+              system_ext.img
+
+            pack_archive "product_vendor" \
+              product.img \
+              vendor.img
+          else
+            echo "2 or fewer partitions detected."
+            echo "Packing as single archive."
+
+            pack_archive "images" \
+              system.img \
+              product.img \
+              system_ext.img \
+              vendor.img
+          fi
+
+          cat > out/release-assets/MANIFEST.txt <<EOF
+          Release: $TAG
+
+          Packing rule:
+          - If 2 or fewer partition images are provided:
+            ${TAG}-images.tar.xz
+
+          - If more than 2 partition images are provided:
+            ${TAG}-system_system_ext.tar.xz
+              contains system.img and system_ext.img if provided
+
+            ${TAG}-product_vendor.tar.xz
+              contains product.img and vendor.img if provided
+
+          Verify archives:
+            sha256sum -c '*.tar.xz.sha256'
+
+          Extract:
+            tar -xf <archive>.tar.xz
+
+          Verify extracted images:
+            sha256sum -c SHA256SUMS.original-images.txt
+          EOF
 
           echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
           echo
-          ls -lh out
+          echo "Release assets:"
+          ls -lh out/release-assets
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.TAG }}
-          path: |
-            ${{ env.ARCHIVE }}
-            ${{ env.ARCHIVE }}.sha256
-            out/SHA256SUMS.txt
+          path: out/release-assets/*
           if-no-files-found: error
           compression-level: 0
 
@@ -259,21 +349,39 @@ jobs:
           echo "Publishing release: $TAG"
           echo "Repo: $GH_REPO"
 
+          ASSETS=(out/release-assets/*)
+
+          cat > out/release-notes.md <<EOF
+          Packed ROM images from workflow inputs.
+
+          Packing rule:
+
+          - If 2 or fewer partition images were provided, assets are packed into one archive:
+            - ${TAG}-images.tar.xz
+
+          - If more than 2 partition images were provided, assets are split into grouped archives:
+            - ${TAG}-system_system_ext.tar.xz
+            - ${TAG}-product_vendor.tar.xz
+
+          Extract:
+
+          \`\`\`bash
+          tar -xf '<archive>.tar.xz'
+          sha256sum -c SHA256SUMS.original-images.txt
+          \`\`\`
+          EOF
+
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             echo "Release exists, uploading assets..."
             gh release upload "$TAG" \
-              "$ARCHIVE" \
-              "${ARCHIVE}.sha256" \
-              out/SHA256SUMS.txt \
+              "${ASSETS[@]}" \
               --repo "$GH_REPO" \
               --clobber
           else
             echo "Creating release..."
             gh release create "$TAG" \
-              "$ARCHIVE" \
-              "${ARCHIVE}.sha256" \
-              out/SHA256SUMS.txt \
+              "${ASSETS[@]}" \
               --repo "$GH_REPO" \
               --title "$TAG" \
-              --notes "Packed ROM images from workflow inputs."
+              --notes-file out/release-notes.md
           fi
