@@ -1,0 +1,178 @@
+name: Pack Drive Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag / archive tag"
+        required: true
+        default: "rom-port-images"
+      system_url:
+        description: "Google Drive/direct link for system.img"
+        required: false
+      product_url:
+        description: "Google Drive/direct link for product.img"
+        required: false
+      system_ext_url:
+        description: "Google Drive/direct link for system_ext.img"
+        required: false
+      vendor_url:
+        description: "Google Drive/direct link for vendor.img"
+        required: false
+      extra_tag:
+        description: "Optional extra name suffix"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Prepare
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl xz-utils tar coreutils
+
+          mkdir -p images out
+
+      - name: Download images
+        env:
+          SYSTEM_URL: ${{ inputs.system_url }}
+          PRODUCT_URL: ${{ inputs.product_url }}
+          SYSTEM_EXT_URL: ${{ inputs.system_ext_url }}
+          VENDOR_URL: ${{ inputs.vendor_url }}
+        run: |
+          set -euo pipefail
+
+          download_file() {
+            local name="$1"
+            local url="$2"
+            local out="images/${name}.img"
+
+            if [ -z "$url" ]; then
+              echo "Skipping $name: no URL provided"
+              return 0
+            fi
+
+            echo "Downloading $name..."
+
+            # Google Drive share link support
+            if echo "$url" | grep -q "drive.google.com"; then
+              file_id="$(
+                echo "$url" | sed -nE 's#.*\/d\/([^/]+).*#\1#p'
+              )"
+
+              if [ -z "$file_id" ]; then
+                file_id="$(
+                  echo "$url" | sed -nE 's#.*[?&]id=([^&]+).*#\1#p'
+                )"
+              fi
+
+              if [ -z "$file_id" ]; then
+                echo "Could not parse Google Drive file ID from: $url"
+                exit 1
+              fi
+
+              cookie="/tmp/gdrive-${name}.cookie"
+
+              curl -L -c "$cookie" \
+                "https://drive.google.com/uc?export=download&id=${file_id}" \
+                -o "/tmp/${name}.html"
+
+              confirm="$(
+                grep -o 'confirm=[^;&]*' "/tmp/${name}.html" | head -n1 | cut -d= -f2 || true
+              )"
+
+              if [ -n "$confirm" ]; then
+                curl -L -b "$cookie" \
+                  "https://drive.google.com/uc?export=download&confirm=${confirm}&id=${file_id}" \
+                  -o "$out"
+              else
+                mv "/tmp/${name}.html" "$out"
+              fi
+            else
+              curl -L --fail --retry 5 --retry-delay 5 "$url" -o "$out"
+            fi
+
+            size="$(wc -c < "$out")"
+
+            if [ "$size" = "0" ]; then
+              echo "ERROR: $out is 0 bytes"
+              exit 1
+            fi
+
+            echo "$name downloaded: $size bytes"
+          }
+
+          download_file "system" "$SYSTEM_URL"
+          download_file "product" "$PRODUCT_URL"
+          download_file "system_ext" "$SYSTEM_EXT_URL"
+          download_file "vendor" "$VENDOR_URL"
+
+      - name: Show downloaded files
+        run: |
+          set -e
+          ls -lh images
+          sha256sum images/* > out/SHA256SUMS.txt
+
+      - name: Pack tar.xz
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          EXTRA_TAG: ${{ inputs.extra_tag }}
+        run: |
+          set -euo pipefail
+
+          TAG="$RELEASE_TAG"
+          if [ -n "$EXTRA_TAG" ]; then
+            TAG="${TAG}-${EXTRA_TAG}"
+          fi
+
+          ARCHIVE="out/${TAG}.tar.xz"
+
+          echo "Creating $ARCHIVE with xz -9e..."
+          tar -I 'xz -9e -T0' -cf "$ARCHIVE" images
+
+          sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
+
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+          ls -lh out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TAG }}
+          path: |
+            ${{ env.ARCHIVE }}
+            ${{ env.ARCHIVE }}.sha256
+            out/SHA256SUMS.txt
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release exists. Uploading assets..."
+            gh release upload "$TAG" \
+              "$ARCHIVE" \
+              "${ARCHIVE}.sha256" \
+              out/SHA256SUMS.txt \
+              --clobber
+          else
+            echo "Creating release $TAG..."
+            gh release create "$TAG" \
+              "$ARCHIVE" \
+              "${ARCHIVE}.sha256" \
+              out/SHA256SUMS.txt \
+              --title "$TAG" \
+              --notes "Packed ROM images from workflow inputs."
+          fi
