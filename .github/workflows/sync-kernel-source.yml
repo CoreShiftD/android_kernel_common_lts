@@ -3,9 +3,6 @@ name: Sync kernel common LTS branches
 on:
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 permissions:
   contents: write
 
@@ -43,7 +40,7 @@ jobs:
           sudo sysctl -w net.ipv6.conf.lo.disable_ipv6=1
 
       - name: Checkout mirror repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

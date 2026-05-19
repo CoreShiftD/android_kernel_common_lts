@@ -14,9 +14,6 @@ on:
         default: ""
         type: string
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 permissions:
   contents: read
 
@@ -29,7 +26,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -75,7 +72,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -135,7 +132,7 @@ jobs:
           exit "$status"
 
       - name: Upload AK3 artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact_name }}-${{ github.run_number }}
           path: dist/${{ matrix.profile }}/*.zip
@@ -149,7 +146,7 @@ jobs:
 
       - name: Upload log artifact
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: logs-${{ matrix.profile }}-${{ matrix.variant }}-${{ github.run_number }}
           path: dist/${{ matrix.profile }}/logs/*.zip
