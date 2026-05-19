@@ -95,7 +95,7 @@ jobs:
 
       - name: Add swap
         shell: bash
-        run: ./scripts/add-swap.sh 24 --aggressive
+        run: ./scripts/add-swap.sh 16 --aggressive
 
       - name: Prepare log metadata
         shell: bash
