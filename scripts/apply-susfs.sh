@@ -172,6 +172,25 @@ find_susfs_repo_path() {
   return 1
 }
 
+list_susfs_repo_paths() {
+  local relative_glob="$1"
+  local patch_root
+  local found=1
+  local matches=()
+
+  for patch_root in "$SUSFS_DIR/kernel_patches" "$SUSFS_DIR/patches"; do
+    [ -d "$patch_root" ] || continue
+    mapfile -t matches < <(compgen -G "$patch_root/$relative_glob" || true)
+    if [ "${#matches[@]}" -eq 0 ]; then
+      continue
+    fi
+    printf '%s\n' "${matches[@]}"
+    found=0
+  done
+
+  return "$found"
+}
+
 copy_repo_file_if_needed() {
   local source_path="$1"
   local target_path="$2"
@@ -186,18 +205,23 @@ copy_repo_file_if_needed() {
   log "Copied SUSFS source: $source_path -> $target_path"
 }
 
-copy_susfs_source_if_present() {
-  local source_rel="$1"
-  local target_rel="$2"
+copy_susfs_sources_if_present() {
+  local source_glob="$1"
+  local target_dir_rel="$2"
+  local target_dir="$COMMON_DIR/$target_dir_rel"
+  local copied_any=1
   local source_path
 
-  source_path="$(find_susfs_repo_path "$source_rel" || true)"
-  if [ -z "$source_path" ]; then
-    log "SUSFS source file not present in selected ref: $source_rel"
-    return 0
-  fi
+  mkdir -p "$target_dir"
+  while IFS= read -r source_path; do
+    [ -n "$source_path" ] || continue
+    copy_repo_file_if_needed "$source_path" "$target_dir/$(basename "$source_path")"
+    copied_any=0
+  done < <(list_susfs_repo_paths "$source_glob" || true)
 
-  copy_repo_file_if_needed "$source_path" "$COMMON_DIR/$target_rel"
+  if [ "$copied_any" -ne 0 ]; then
+    log "No SUSFS source files matched in selected ref: $source_glob"
+  fi
 }
 
 resolve_kernel_patch_dir() {
@@ -367,6 +391,9 @@ verify_susfs_integration() {
   [ -f "$COMMON_DIR/include/linux/susfs.h" ] || fail "Missing SUSFS header after apply: $COMMON_DIR/include/linux/susfs.h"
   log "Verified SUSFS header exists: $COMMON_DIR/include/linux/susfs.h"
 
+  [ -f "$COMMON_DIR/include/linux/susfs_def.h" ] || fail "Missing SUSFS header after apply: $COMMON_DIR/include/linux/susfs_def.h"
+  log "Verified SUSFS header exists: $COMMON_DIR/include/linux/susfs_def.h"
+
   if ! grep -R -E -q 'KSU_SUSFS|susfs' "$ksu_dir"; then
     fail "KernelSU source tree does not contain SUSFS integration strings: $ksu_dir"
   fi
@@ -407,8 +434,8 @@ RESOLVED_SUSFS_REF="$(resolve_susfs_ref)"
 clone_susfs_source "$RESOLVED_SUSFS_REF"
 rm -rf "$SUSFS_DIR/.github"
 
-copy_susfs_source_if_present 'fs/susfs.c' 'fs/susfs.c'
-copy_susfs_source_if_present 'include/linux/susfs.h' 'include/linux/susfs.h'
+copy_susfs_sources_if_present 'fs/susfs*.c' 'fs'
+copy_susfs_sources_if_present 'include/linux/susfs*.h' 'include/linux'
 
 KERNEL_PATCH_DIR="$(resolve_kernel_patch_dir || true)"
 [ -n "$KERNEL_PATCH_DIR" ] || fail "No SUSFS kernel patch directory found for $PROFILE_NAME in selected ref $RESOLVED_SUSFS_REF"
