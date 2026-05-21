@@ -21,6 +21,7 @@ FEATURES_FRAGMENT="$COMMON_DIR/features.fragment"
 SUSFS_DIR="$COMMON_DIR/SUSFS"
 SUSFS_REPO="${SUSFS_REPO:-https://gitlab.com/simonpunk/susfs4ksu.git}"
 SUSFS_REFS_CONFIG="$REPO_ROOT/configs/susfs-refs.json"
+LOCAL_SUSFS_PATCH_ROOT="$REPO_ROOT/patches/susfs"
 if [ -n "${CORESHIFT_LOG_DIR:-}" ]; then
   SUSFS_LOG_DIR="$CORESHIFT_LOG_DIR/patches/susfs"
   mkdir -p "$SUSFS_LOG_DIR"
@@ -259,6 +260,85 @@ collect_patch_files() {
   find "$patch_root" -maxdepth 1 -type f -name '*.patch' | sort
 }
 
+resolve_local_kernel_patch_dir() {
+  local patch_root
+  local candidate_dirs=(
+    "$LOCAL_SUSFS_PATCH_ROOT/$PROFILE_NAME"
+    "$LOCAL_SUSFS_PATCH_ROOT/$ANDROID_RELEASE-$KERNEL_VERSION"
+    "$LOCAL_SUSFS_PATCH_ROOT/$KERNEL_VERSION"
+  )
+
+  for patch_root in "${candidate_dirs[@]}"; do
+    if [ -d "$patch_root" ] && find "$patch_root" -type f -name '*.patch' -print -quit | grep -q .; then
+      printf '%s\n' "$patch_root"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+collect_local_override_patch_files() {
+  local patch_root="$1"
+  [ -d "$patch_root" ] || return 1
+  find "$patch_root" -type f -name '*.patch' | sort
+}
+
+build_filtered_kernel_patch() {
+  local patch_file="$1"
+  local override_dir="$2"
+  local filtered_patch
+
+  filtered_patch="$(mktemp)"
+  python3 - "$patch_file" "$override_dir" "$filtered_patch" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+patch_path = Path(sys.argv[1])
+override_dir = Path(sys.argv[2])
+output_path = Path(sys.argv[3])
+
+lines = patch_path.read_text(encoding="utf-8").splitlines(keepends=True)
+sections = []
+current = []
+
+for line in lines:
+    if line.startswith("diff --git "):
+        if current:
+            sections.append(current)
+        current = [line]
+    else:
+        current.append(line)
+
+if current:
+    sections.append(current)
+
+kept = []
+for section in sections:
+    header = section[0].rstrip("\n")
+    match = re.match(r"^diff --git a/(.+) b/(.+)$", header)
+    if not match:
+        kept.extend(section)
+        continue
+
+    target_path = match.group(2)
+    if (override_dir / f"{target_path}.patch").is_file():
+        continue
+
+    kept.extend(section)
+
+if kept:
+    output_path.write_text("".join(kept), encoding="utf-8")
+PY
+
+  if [ -s "$filtered_patch" ]; then
+    printf '%s\n' "$filtered_patch"
+  else
+    rm -f "$filtered_patch"
+  fi
+}
+
 looks_like_kernelsu_dir() {
   local candidate="$1"
   [ -d "$candidate" ] || return 1
@@ -440,10 +520,40 @@ copy_susfs_sources_if_present 'include/linux/susfs*.h' 'include/linux'
 KERNEL_PATCH_DIR="$(resolve_kernel_patch_dir || true)"
 [ -n "$KERNEL_PATCH_DIR" ] || fail "No SUSFS kernel patch directory found for $PROFILE_NAME in selected ref $RESOLVED_SUSFS_REF"
 log "Using SUSFS kernel patch directory: $KERNEL_PATCH_DIR"
+LOCAL_KERNEL_PATCH_DIR="$(resolve_local_kernel_patch_dir || true)"
+if [ -n "$LOCAL_KERNEL_PATCH_DIR" ]; then
+  log "Using local SUSFS kernel patch overrides: $LOCAL_KERNEL_PATCH_DIR"
+fi
 
 mapfile -t susfs_kernel_patch_files < <(collect_patch_files "$KERNEL_PATCH_DIR" || true)
 if [ "${#susfs_kernel_patch_files[@]}" -eq 0 ]; then
   fail "No SUSFS kernel patch files found in $KERNEL_PATCH_DIR"
+fi
+
+declare -a effective_kernel_patch_files=()
+declare -a local_override_patch_files=()
+if [ -n "$LOCAL_KERNEL_PATCH_DIR" ]; then
+  mapfile -t local_override_patch_files < <(collect_local_override_patch_files "$LOCAL_KERNEL_PATCH_DIR" || true)
+  for patch_file in "${local_override_patch_files[@]}"; do
+    log "Using local SUSFS kernel patch override: $patch_file"
+  done
+fi
+
+for patch_file in "${susfs_kernel_patch_files[@]}"; do
+  filtered_patch_file="$patch_file"
+  if [ "${#local_override_patch_files[@]}" -gt 0 ]; then
+    filtered_patch_file="$(build_filtered_kernel_patch "$patch_file" "$LOCAL_KERNEL_PATCH_DIR")"
+    if [ -n "$filtered_patch_file" ] && [ "$filtered_patch_file" != "$patch_file" ]; then
+      log "Filtered upstream SUSFS kernel patch through local overrides: $patch_file"
+    fi
+  fi
+  if [ -n "$filtered_patch_file" ]; then
+    effective_kernel_patch_files+=("$filtered_patch_file")
+  fi
+done
+effective_kernel_patch_files+=("${local_override_patch_files[@]}")
+if [ "${#effective_kernel_patch_files[@]}" -eq 0 ]; then
+  fail "No effective SUSFS kernel patch files selected for $PROFILE_NAME"
 fi
 
 KERNELSU_PATCH_FILE="$(find_susfs_repo_path 'KernelSU/10_enable_susfs_for_ksu.patch' || true)"
@@ -463,7 +573,7 @@ if [ -n "$KERNELSU_PATCH_FILE" ]; then
   config_patch_inputs+=("$KERNELSU_PATCH_FILE")
 fi
 
-for patch_file in "${susfs_kernel_patch_files[@]}"; do
+for patch_file in "${effective_kernel_patch_files[@]}"; do
   apply_patch_file "$patch_file" "$COMMON_DIR" "kernel"
   config_patch_inputs+=("$patch_file")
 done
@@ -505,6 +615,9 @@ if [ -n "$SUSFS_LOG_DIR" ]; then
     echo "SUSFS source path: $SUSFS_DIR"
     echo "KernelSU source path: $KERNELSU_DIR"
     echo "Kernel patch directory: $KERNEL_PATCH_DIR"
+    if [ -n "$LOCAL_KERNEL_PATCH_DIR" ]; then
+      echo "Local kernel override directory: $LOCAL_KERNEL_PATCH_DIR"
+    fi
     if [ -n "$KERNELSU_PATCH_FILE" ]; then
       echo "KernelSU patch file: $KERNELSU_PATCH_FILE"
     fi
@@ -520,6 +633,9 @@ echo "SUSFS commit: $susfs_commit"
 echo "SUSFS source path: $SUSFS_DIR"
 echo "KernelSU source path: $KERNELSU_DIR"
 echo "Kernel patch directory: $KERNEL_PATCH_DIR"
+if [ -n "$LOCAL_KERNEL_PATCH_DIR" ]; then
+  echo "Local kernel override directory: $LOCAL_KERNEL_PATCH_DIR"
+fi
 if [ -n "$KERNELSU_PATCH_FILE" ]; then
   echo "KernelSU patch file: $KERNELSU_PATCH_FILE"
 fi

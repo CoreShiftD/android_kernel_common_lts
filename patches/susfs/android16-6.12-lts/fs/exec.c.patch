@@ -1,0 +1,14 @@
+diff --git a/fs/exec.c b/fs/exec.c
+index 965fdc5..35e51c5 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -70,6 +70,9 @@
+ #include <linux/rseq.h>
+ #include <linux/ksm.h>
+ #include <linux/dma-buf.h>
++#ifdef CONFIG_KSU_SUSFS
++#include <linux/susfs_def.h>
++#endif
+ 
+ #include <linux/uaccess.h>
+ #include <asm/mmu_context.h>
