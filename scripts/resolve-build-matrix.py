@@ -219,6 +219,7 @@ def load_kernelsu_setups(
             setup = setup_definition.get("setup")
             repo = setup_definition.get("repo")
             ref = setup_definition.get("ref")
+            kernelsu_susfs_patch = setup_definition.get("kernelsu_susfs_patch", True)
             for field_name, value in (("setup", setup), ("repo", repo), ("ref", ref)):
                 if not isinstance(value, str) or not value:
                     fail(
@@ -227,11 +228,17 @@ def load_kernelsu_setups(
                     )
             if not KERNELSU_SETUP_RE.fullmatch(setup):
                 fail(f"{path}: invalid KernelSU setup name {setup!r}")
+            if not isinstance(kernelsu_susfs_patch, bool):
+                fail(
+                    f"{path}: setup for {profile_name!r}/{variant_name!r} "
+                    "field 'kernelsu_susfs_patch' must be a boolean"
+                )
 
             resolved[(profile_name, variant_name)] = {
                 "setup": setup,
                 "repo": repo,
                 "ref": ref,
+                "kernelsu_susfs_patch": "true" if kernelsu_susfs_patch else "false",
             }
 
     return resolved
@@ -287,6 +294,7 @@ def build_entries(
                         "kernelsu_setup": kernelsu_setup["setup"],
                         "kernelsu_repo": kernelsu_setup["repo"],
                         "kernelsu_ref": kernelsu_setup["ref"],
+                        "kernelsu_susfs_patch": kernelsu_setup["kernelsu_susfs_patch"],
                     }
                 )
             entries.append(entry)

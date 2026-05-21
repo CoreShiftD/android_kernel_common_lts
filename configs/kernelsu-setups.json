@@ -1,15 +1,31 @@
 {
   "profiles": {
-    "android12-5.4-lts": {
+    "android11-5.4-lts": {
       "ksu-susfs-bbg": {
         "setup": "legacy-multisu",
         "repo": "https://github.com/xxblebleblexx/MultiSU",
-        "ref": "legacy"
+        "ref": "legacy",
+        "kernelsu_susfs_patch": false
       },
       "ksu-susfs-bbg-droidspaces": {
         "setup": "legacy-multisu",
         "repo": "https://github.com/xxblebleblexx/MultiSU",
-        "ref": "legacy"
+        "ref": "legacy",
+        "kernelsu_susfs_patch": false
+      }
+    },
+    "android12-5.4-lts": {
+      "ksu-susfs-bbg": {
+        "setup": "legacy-multisu",
+        "repo": "https://github.com/xxblebleblexx/MultiSU",
+        "ref": "legacy",
+        "kernelsu_susfs_patch": false
+      },
+      "ksu-susfs-bbg-droidspaces": {
+        "setup": "legacy-multisu",
+        "repo": "https://github.com/xxblebleblexx/MultiSU",
+        "ref": "legacy",
+        "kernelsu_susfs_patch": false
       }
     }
   }

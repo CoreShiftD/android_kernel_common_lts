@@ -20,6 +20,7 @@ COMMON_DIR="$WORKSPACE_DIR/common"
 FEATURES_FRAGMENT="$COMMON_DIR/features.fragment"
 SUSFS_DIR="$COMMON_DIR/SUSFS"
 SUSFS_REPO="${SUSFS_REPO:-https://gitlab.com/simonpunk/susfs4ksu.git}"
+KERNELSU_SUSFS_PATCH="${CORESHIFT_KERNELSU_SUSFS_PATCH:-true}"
 SUSFS_REFS_CONFIG="$REPO_ROOT/configs/susfs-refs.json"
 LOCAL_SUSFS_PATCH_ROOT="$REPO_ROOT/patches/susfs"
 if [ -n "${CORESHIFT_LOG_DIR:-}" ]; then
@@ -457,21 +458,35 @@ cleanup_patch_log() {
   fi
 }
 
+patch_targets_summary() {
+  local patch_file="$1"
+  grep '^diff --git ' "$patch_file" |
+    sed -E 's#^diff --git a/[^ ]+ b/##; s#^kernel/##' |
+    paste -sd ', ' -
+}
+
 apply_patch_file() {
   local patch_file="$1"
   local target_dir="$2"
   local label="$3"
   local patch_log
   local patch_level
+  local patch_targets
 
   patch_log="$(patch_log_path "$patch_file" "$label")"
   : > "$patch_log"
+  patch_targets="$(patch_targets_summary "$patch_file")"
+  [ -n "$patch_targets" ] || patch_targets="$(basename "$patch_file")"
 
   for patch_level in 1 2; do
     log "Dry-run ${label} patch: $patch_file (-p$patch_level)"
-    if (cd "$target_dir" && patch --dry-run "-p$patch_level" < "$patch_file") >"$patch_log" 2>&1; then
-      log "Applying ${label} patch: $patch_file (-p$patch_level)"
-      if ! (cd "$target_dir" && patch "-p$patch_level" < "$patch_file") >>"$patch_log" 2>&1; then
+    if (cd "$target_dir" && patch --dry-run --silent --batch --forward "-p$patch_level" < "$patch_file") >"$patch_log" 2>&1; then
+      if [ "$label" = "kernelsu" ]; then
+        log "KernelSU SUSFS patch: applying $patch_targets"
+      else
+        log "Applying ${label} patch: $patch_file (-p$patch_level)"
+      fi
+      if ! (cd "$target_dir" && patch --silent --batch --forward "-p$patch_level" < "$patch_file") >>"$patch_log" 2>&1; then
         echo "Failed to apply ${label} patch: $patch_file" >&2
         sed -n '1,120p' "$patch_log" >&2
         cleanup_patch_log "$patch_log"
@@ -481,14 +496,22 @@ apply_patch_file() {
       return 0
     fi
 
-    if (cd "$target_dir" && patch --dry-run -R "-p$patch_level" < "$patch_file") >"$patch_log" 2>&1; then
-      log "Skipping already-applied ${label} patch: $patch_file (-p$patch_level)"
+    if (cd "$target_dir" && patch --dry-run --silent --batch -R "-p$patch_level" < "$patch_file") >"$patch_log" 2>&1; then
+      if [ "$label" = "kernelsu" ]; then
+        log "KernelSU SUSFS patch: $patch_targets already applied, skipping"
+      else
+        log "Skipping already-applied ${label} patch: $patch_file (-p$patch_level)"
+      fi
       cleanup_patch_log "$patch_log"
       return 0
     fi
   done
 
-  echo "Failed dry-run for ${label} patch: $patch_file" >&2
+  if [ "$label" = "kernelsu" ]; then
+    echo "KernelSU SUSFS patch: failed to apply cleanly: $patch_file" >&2
+  else
+    echo "Failed dry-run for ${label} patch: $patch_file" >&2
+  fi
   echo "Patch target directory: $target_dir" >&2
   sed -n '1,120p' "$patch_log" >&2
   cleanup_patch_log "$patch_log"
@@ -611,16 +634,30 @@ if [ "${#effective_kernel_patch_files[@]}" -eq 0 ]; then
   fail "No effective SUSFS kernel patch files selected for $PROFILE_NAME"
 fi
 
-KERNELSU_PATCH_FILE="$(find_susfs_repo_path 'KernelSU/10_enable_susfs_for_ksu.patch' || true)"
-if [ -n "$KERNELSU_PATCH_FILE" ]; then
-  log "Using KernelSU SUSFS patch: $KERNELSU_PATCH_FILE"
-else
-  log "KernelSU SUSFS patch not present in selected ref"
-fi
-
 KERNELSU_DIR="$(find_kernelsu_dir || true)"
 [ -n "$KERNELSU_DIR" ] || fail "Could not locate an existing KernelSU source tree under $COMMON_DIR"
 log "Resolved KernelSU source tree: $KERNELSU_DIR"
+
+KERNELSU_PATCH_FILE=""
+case "$KERNELSU_SUSFS_PATCH" in
+  true|TRUE|1|yes|YES|on|ON)
+    KERNELSU_PATCH_FILE="$(find_susfs_repo_path 'KernelSU/10_enable_susfs_for_ksu.patch' || true)"
+    if [ -n "$KERNELSU_PATCH_FILE" ]; then
+      log "Using KernelSU SUSFS patch: $KERNELSU_PATCH_FILE"
+      if [ -f "$KERNELSU_DIR/policy/allowlist.c" ]; then
+        grep -n -E 'susfs|SUSFS|allowlist' "$KERNELSU_DIR/policy/allowlist.c" || true
+      fi
+    else
+      log "KernelSU SUSFS patch not present in selected ref"
+    fi
+    ;;
+  false|FALSE|0|no|NO|off|OFF)
+    log "KernelSU SUSFS patch disabled for setup; assuming KernelSU source already carries required integration"
+    ;;
+  *)
+    fail "CORESHIFT_KERNELSU_SUSFS_PATCH must be true/false, 1/0, yes/no, or on/off: $KERNELSU_SUSFS_PATCH"
+    ;;
+esac
 
 declare -a config_patch_inputs=()
 if [ -n "$KERNELSU_PATCH_FILE" ]; then
