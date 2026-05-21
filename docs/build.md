@@ -105,15 +105,15 @@ The cleanup is limited to generated cache/work/output paths. Source directories 
 
 ## Droidspaces GKI support
 
-Droidspaces is config-driven, not env-only. It is enabled by selecting a variant whose feature list includes `droidspaces`: `droidspaces` or `ksu-susfs-bbg-droidspaces`. Profiles allow Droidspaces by listing those variants in `configs/profile-variants.json`.
+Droidspaces is GKI-only and profile/variant driven. It is enabled by selecting a variant whose feature list includes `droidspaces`: `droidspaces` or `ksu-susfs-bbg-droidspaces`. Profiles allow Droidspaces by listing those variants in `configs/profile-variants.json`.
 
 `scripts/apply-droidspaces-gki-support.sh` runs against the prepared workspace before the normal feature hooks when the selected variant includes `droidspaces`. The helper supports GKI kernels only, selects the upstream patch set from kernel version, writes the required Kconfig entries into `common/droidspaces.fragment`, refreshes `common/coreshift.kleaf.fragment`, and only adds the required IPC symbol exports for 6.12+ kernels.
 
-`DROIDSPACES_ENABLE` is a developer override, not the normal enablement path:
+`DROIDSPACES_ENABLE` is an explicit override, not the normal enablement path:
 
 - unset: follow the selected variant feature list
-- `DROIDSPACES_ENABLE=1`: force-enable Droidspaces for local testing
-- `DROIDSPACES_ENABLE=0`: force-disable Droidspaces for local testing
+- `DROIDSPACES_ENABLE=1`: force-enable Droidspaces
+- `DROIDSPACES_ENABLE=0`: force-disable Droidspaces
 
 The generated `common/droidspaces.fragment` contains the required IPC, namespace, devtmpfs, netfilter/ipset, and tmpfs xattr options. It is merged between `common/lto.fragment` and `common/features.fragment` for both `google_build_sh` and Kleaf paths.
 
@@ -127,6 +127,18 @@ Patch selection is version-aware:
 - GKI 5.10 and lower also applies the POSIX mqueue padding patch.
 - GKI 6.12 and newer uses `GKI/kernel-6.12/001.GKI-6.12-or-above-fix_sysvipc_kabi.patch`.
 - IPC symbol exports are added only for GKI 6.12 and newer.
+
+## KernelSU and SUSFS
+
+The default KernelSU source is `https://github.com/KOWX712/KernelSU`. The build flow clones the selected source and uses the source-provided `setup.sh` when present.
+
+For 5.4 KMI SUSFS variants, `configs/kernelsu-setups.json` selects the MultiSU compatibility source `https://github.com/xxblebleblexx/MultiSU` at ref `legacy`. CoreShift runs the fetched source `setup.sh` from the prepared kernel root, then normalizes `drivers/kernelsu`, `drivers/Makefile`, and `drivers/Kconfig` for repeatable runs.
+
+SUSFS same-path overrides under `patches/susfs/<profile>/` are complete upstream section replacements. Each override must preserve the selected upstream behavior for that file and adjust only for the local kernel source layout.
+
+## 6.12 KMI LTO
+
+`android16-6.12-lts` requires ThinLTO. Full, none, and default LTO override paths are rejected for this profile.
 
 ## Private-build escape hatches
 

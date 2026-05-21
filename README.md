@@ -1,6 +1,6 @@
 # CoreShift ACK workspace
 
-JSON-driven Android Common Kernel/GKI workspace builder for multiple ACK LTS branches.
+JSON-driven Android Common Kernel/GKI workspace builder for supported ACK KMI lines.
 
 It is intended for repeatable ACK/GKI kernel builds and CI templates, not ROM building.
 
@@ -8,7 +8,7 @@ It is intended for repeatable ACK/GKI kernel builds and CI templates, not ROM bu
 
 - Manifest-based ACK workspace setup
 - Profile-specific manifest workspace policy
-- Profile-driven branch and build backend selection
+- KMI/profile-driven branch and build backend selection
 - `google_build_sh` and Kleaf support
 - Private Kconfig fragment support
 - Profile-aware LTO
@@ -51,19 +51,18 @@ cp configs/fragments/private.fragment.example private.fragment
 - `Build-Variants.yml`: JSON-resolved allowed profile/variant matrix
 - `Test-Manifest-Trim.yml`: manifest workspace policy test only
 
-## Supported profiles
+## Supported KMI lines
 
-| Profile | LTO | Variants |
+All profiles support `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, and `ksu-susfs-bbg-droidspaces`.
+
+| KMI | Profiles | LTO |
 | --- | --- | --- |
-| `android11-5.4-lts` | `full` | `vanilla`, `droidspaces` |
-| `android12-5.4-lts` | `full` | `vanilla`, `droidspaces` |
-| `android12-5.10-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
-| `android13-5.10-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
-| `android13-5.15-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
-| `android14-5.15-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
-| `android14-6.1-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
-| `android15-6.6-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
-| `android16-6.12-lts` | `thin` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
+| 5.4 | `android11-5.4-lts`, `android12-5.4-lts` | `full` |
+| 5.10 | `android12-5.10-lts`, `android13-5.10-lts` | `full` |
+| 5.15 | `android13-5.15-lts`, `android14-5.15-lts` | `full` |
+| 6.1 | `android14-6.1-lts` | `full` |
+| 6.6 | `android15-6.6-lts` | `full` |
+| 6.12 | `android16-6.12-lts` | `thin` |
 
 ## Documentation
 
@@ -82,5 +81,5 @@ cp configs/fragments/private.fragment.example private.fragment
 CoreShift builds ACK/GKI kernel artifacts and AnyKernel3 zip outputs.
 
 - Device-specific `boot.img` or `vendor_boot.img` packaging remains separate.
-- SUSFS is experimental and only available through KernelSU variants.
+- SUSFS is available through KernelSU variants.
 - This is not a ROM builder.

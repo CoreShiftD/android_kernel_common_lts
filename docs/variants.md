@@ -23,7 +23,7 @@ No other variant names or aliases are supported.
 
 ## Feature Integration
 
-- KernelSU is integrated through the upstream KernelSU `kernel/setup.sh`.
+- KernelSU is staged by `scripts/apply-ksu.sh`, which links the resolved KernelSU kernel integration tree into `drivers/kernelsu`.
 - SUSFS requires KernelSU and is integrated from Simonpunk GitLab: `https://gitlab.com/simonpunk/susfs4ksu.git`.
 - BBG is integrated through the upstream Baseband-guard `setup.sh`.
 - Droidspaces is a GKI-only feature. Droidspaces variants run `scripts/apply-droidspaces-gki-support.sh`, write `common/droidspaces.fragment`, and fail clearly if the prepared kernel tree is not GKI.
@@ -35,10 +35,24 @@ Feature application order is:
 3. `susfs`
 4. `bbg`
 
-## 5.4 Policy
+## 5.4 KMI KernelSU Setup
 
-- Production 5.4 profiles expose only `vanilla` and `droidspaces`.
-- KSU variants are not enabled on 5.4 profiles because current KernelSU `main` includes `linux/pgtable.h`, which is missing on the tested 5.4 ACK common trees.
+5.4 KMI profiles support the same production variants as newer KMI lines.
+
+Plain `ksu` uses the default KernelSU source:
+
+```text
+https://github.com/KOWX712/KernelSU
+```
+
+The 5.4 KMI SUSFS variants use the configured `legacy-multisu` compatibility setup:
+
+```text
+https://github.com/xxblebleblexx/MultiSU
+ref: legacy
+```
+
+CoreShift runs the fetched source `setup.sh` from the prepared kernel root, then normalizes `drivers/kernelsu`, `drivers/Makefile`, and `drivers/Kconfig` so repeated setup runs remain stable. Sources without a setup script use the repo-owned fallback layout integration.
 
 ## Pinning Feature Refs
 
@@ -50,7 +64,7 @@ Examples:
 ./scripts/build-kernel.sh android16-6.12-lts --variant droidspaces --build-env DROIDSPACES_REF=<branch-or-commit>
 ```
 
-If `SUSFS_REF` is unset, CoreShift first checks `configs/susfs-refs.json`, then probes likely official branch names for the selected Android release and kernel version.
+If `SUSFS_REF` is unset, CoreShift first checks `configs/susfs-refs.json`, then probes likely official branch names for the selected Android release and KMI line.
 
 SUSFS config is variant-owned. It is written to `common/features.fragment`, not `configs/fragments/coreshift.fragment` or repo-root `private.fragment`.
 

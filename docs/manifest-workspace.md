@@ -47,7 +47,7 @@ This keeps manifest branch selection and `kernel/common` branch selection under 
 - `safe`: remove only the overlay policy `safe.remove_projects`
 - `aggressive`: remove only the overlay policy `aggressive.remove_projects`
 
-Current profiles all use safe mode. Aggressive mode is experimental and is enabled only by editing the profile JSON.
+Current profiles all use safe mode. Aggressive mode is available only by editing the profile JSON.
 
 Every setup run writes `manifest-trim-report.txt` in the workspace root with project counts, removed projects, the selected overlay policy, and any per-run extra remove overrides.
 

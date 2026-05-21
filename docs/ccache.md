@@ -2,9 +2,9 @@
 
 ## Current behavior
 
-CoreShift no longer enables ccache in CI or in the default local build flow.
+CoreShift does not enable ccache in CI or in the default local build flow.
 
-The previous ccache setup could preserve stale compiler and workspace state across ACK/GKI sync and build attempts. That made failures harder to reproduce, including stale repo state, stale toolchain paths, and unreliable ccache wrapper behavior.
+Persistent compiler and workspace caches are disabled so ACK/GKI sync and build outputs are reproducible across runs.
 
 ## Policy
 

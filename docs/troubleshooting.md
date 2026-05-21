@@ -6,11 +6,11 @@
 
 CoreShift patches the prepared workspace so those tests can use `UAPI_SYSROOT_CFLAGS`, with the default sysroot pointing at `/usr/aarch64-linux-gnu/include`.
 
-## `android16-6.12-lts` full LTO and `rust_binder.ko`
+## `android16-6.12-lts` LTO policy
 
-`android16-6.12-lts` uses thin LTO because full LTO caused the Kleaf `rust_binder.ko` output to disappear.
+`android16-6.12-lts` requires ThinLTO for the 6.12 KMI build path.
 
-Full-LTO override paths are intentionally rejected for that profile.
+Full-LTO override paths are rejected for that profile.
 
 ## BBG `CONFIG_LSM` / `baseband_guard`
 
@@ -18,9 +18,9 @@ BBG writes variant-owned config into `common/features.fragment` and ensures `CON
 
 If you hand-edit fragment inputs around BBG, do not remove that token from the effective LSM list.
 
-## KSU on 5.4
+## KernelSU on 5.4 KMI
 
-5.4 does not enable KSU by default because current KernelSU `main` includes `linux/pgtable.h`, which is missing on the tested 5.4 ACK common trees.
+5.4 KMI profiles support KernelSU variants. Plain `ksu` uses the normal KOWX KernelSU source. SUSFS variants use the configured MultiSU compatibility setup.
 
 ## SUSFS
 
@@ -56,7 +56,7 @@ If aggressive overlay policy breaks `repo sync` or the later kernel build:
 
 - Switch that profile `manifest_overlay_mode` back to `safe`
 - Safe mode is the supported current policy
-- Aggressive mode is experimental
+- Aggressive mode is not the default policy
 - Run `Test-Manifest-Trim.yml` with `extra_remove_projects` only when you need to validate a larger explicit remove list
 - Inspect `manifest-trim-report.txt`
 - Promote working rules into `manifests/overlays/<profile>.json`

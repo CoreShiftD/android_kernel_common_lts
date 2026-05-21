@@ -32,7 +32,6 @@
 # CONFIG_VETH=y
 # CONFIG_BRIDGE=y
 
-# Debug / tracing
+# Tracing
 # CONFIG_KPROBES=y
 # CONFIG_FTRACE=y
-

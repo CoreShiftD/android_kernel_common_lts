@@ -482,7 +482,7 @@ apply_patch_file() {
     log "Dry-run ${label} patch: $patch_file (-p$patch_level)"
     if (cd "$target_dir" && patch --dry-run --silent --batch --forward "-p$patch_level" < "$patch_file") >"$patch_log" 2>&1; then
       if [ "$label" = "kernelsu" ]; then
-        log "KernelSU SUSFS patch: applying $patch_targets"
+        log "KernelSU: applying SUSFS patch for $patch_targets"
       else
         log "Applying ${label} patch: $patch_file (-p$patch_level)"
       fi
@@ -498,7 +498,7 @@ apply_patch_file() {
 
     if (cd "$target_dir" && patch --dry-run --silent --batch -R "-p$patch_level" < "$patch_file") >"$patch_log" 2>&1; then
       if [ "$label" = "kernelsu" ]; then
-        log "KernelSU SUSFS patch: $patch_targets already applied, skipping"
+        log "KernelSU: SUSFS patch already applied for $patch_targets"
       else
         log "Skipping already-applied ${label} patch: $patch_file (-p$patch_level)"
       fi
@@ -508,7 +508,7 @@ apply_patch_file() {
   done
 
   if [ "$label" = "kernelsu" ]; then
-    echo "KernelSU SUSFS patch: failed to apply cleanly: $patch_file" >&2
+    echo "KernelSU: SUSFS patch failed to apply cleanly: $patch_file" >&2
   else
     echo "Failed dry-run for ${label} patch: $patch_file" >&2
   fi
@@ -652,7 +652,7 @@ case "$KERNELSU_SUSFS_PATCH" in
     fi
     ;;
   false|FALSE|0|no|NO|off|OFF)
-    log "KernelSU SUSFS patch disabled for setup; assuming KernelSU source already carries required integration"
+    log "KernelSU: SUSFS patch disabled for this setup"
     ;;
   *)
     fail "CORESHIFT_KERNELSU_SUSFS_PATCH must be true/false, 1/0, yes/no, or on/off: $KERNELSU_SUSFS_PATCH"

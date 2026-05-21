@@ -34,10 +34,10 @@ VALID_LTO_VALUES = ("full", "thin", "none", "default")
 VALID_OVERLAY_MODES = ("safe", "aggressive")
 VALID_OVERLAY_POLICY_KEYS = ("safe", "aggressive")
 VALID_OVERLAY_MODE_KEYS = ("remove_projects",)
-LEGACY_TRIM_FIELD = "manifest" "_trim"
-LEGACY_OVERLAY_FIELD = "overlay" "_manifest"
-LEGACY_KEEP_FIELD = "keep" "_patterns"
-LEGACY_PROFILE_REMOVE_FIELD = "remove_projects"
+REMOVED_TRIM_FIELD = "manifest" "_trim"
+REMOVED_OVERLAY_FIELD = "overlay" "_manifest"
+REMOVED_KEEP_FIELD = "keep" "_patterns"
+REMOVED_PROFILE_REMOVE_FIELD = "remove_projects"
 
 
 def fail(message: str) -> None:
@@ -94,23 +94,23 @@ def validate_profile(path: Path, repo_root: Path) -> str:
     if not isinstance(data, dict):
         fail(f"{path}: top-level JSON value must be an object")
 
-    if LEGACY_TRIM_FIELD in data:
+    if REMOVED_TRIM_FIELD in data:
         fail(
-            f"{path}: unsupported field {LEGACY_TRIM_FIELD!r}; "
+            f"{path}: unsupported field {REMOVED_TRIM_FIELD!r}; "
             "profiles must select manifest_overlay JSON policies instead"
         )
-    if LEGACY_OVERLAY_FIELD in data:
+    if REMOVED_OVERLAY_FIELD in data:
         fail(
-            f"{path}: unsupported field {LEGACY_OVERLAY_FIELD!r}; "
+            f"{path}: unsupported field {REMOVED_OVERLAY_FIELD!r}; "
             "use manifest_overlay"
         )
-    if LEGACY_KEEP_FIELD in data:
+    if REMOVED_KEEP_FIELD in data:
         fail(
-            f"{path}: profile-level field {LEGACY_KEEP_FIELD!r} is not supported"
+            f"{path}: profile-level field {REMOVED_KEEP_FIELD!r} is not supported"
         )
-    if LEGACY_PROFILE_REMOVE_FIELD in data:
+    if REMOVED_PROFILE_REMOVE_FIELD in data:
         fail(
-            f"{path}: profile-level field {LEGACY_PROFILE_REMOVE_FIELD!r} is not supported; "
+            f"{path}: profile-level field {REMOVED_PROFILE_REMOVE_FIELD!r} is not supported; "
             "remove lists live in manifests/overlays/*.json"
         )
 

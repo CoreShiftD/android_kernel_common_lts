@@ -34,7 +34,8 @@ git -C "$COMMON_DIR" config user.email "coreshift-builder@localhost"
 
 for metadata_path in \
   "$COMMON_DIR/Baseband-guard/.github" \
-  "$COMMON_DIR/KernelSU/.github"
+  "$COMMON_DIR/KernelSU/.github" \
+  "$COMMON_DIR/MultiSU/.github"
 do
   if [ -e "$metadata_path" ]; then
     rm -rf "$metadata_path"
@@ -57,6 +58,9 @@ if [ "${#nested_git_paths[@]}" -gt 0 ]; then
       "$COMMON_DIR/KernelSU/.git")
         echo "Keeping KernelSU/.git for KSU_GIT_VERSION during build." >&2
         ;;
+      "$COMMON_DIR/MultiSU/.git")
+        echo "Keeping MultiSU/.git for KernelSU source metadata during build." >&2
+        ;;
       "$COMMON_DIR/Baseband-guard/.git")
         echo "Keeping Baseband-guard/.git for BBG version metadata during build." >&2
         ;;
@@ -66,7 +70,7 @@ if [ "${#nested_git_paths[@]}" -gt 0 ]; then
       "$COMMON_DIR/Droidspaces/.git")
         echo "Keeping Droidspaces/.git for Droidspaces source metadata during build." >&2
         ;;
-      "$COMMON_DIR/Baseband-guard/"*"/.git"|"$COMMON_DIR/KernelSU/"*"/.git"|"$COMMON_DIR/SUSFS/"*"/.git"|"$COMMON_DIR/Droidspaces/"*"/.git")
+      "$COMMON_DIR/Baseband-guard/"*"/.git"|"$COMMON_DIR/KernelSU/"*"/.git"|"$COMMON_DIR/MultiSU/"*"/.git"|"$COMMON_DIR/SUSFS/"*"/.git"|"$COMMON_DIR/Droidspaces/"*"/.git")
         unexpected_nested_git+=("$nested_git_path")
         ;;
       *)
@@ -86,6 +90,7 @@ git -C "$COMMON_DIR" add -A -- . \
   ":(exclude)dist/" \
   ":(exclude).packaging/" \
   ":(exclude)KernelSU/" \
+  ":(exclude)MultiSU/" \
   ":(exclude)Baseband-guard/" \
   ":(exclude)SUSFS/" \
   ":(exclude)Droidspaces/"

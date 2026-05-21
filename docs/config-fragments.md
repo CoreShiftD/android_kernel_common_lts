@@ -43,4 +43,4 @@ Kleaf consumes `common/coreshift.kleaf.fragment`, which is generated during work
 - Repo-root `private.fragment` is local and layered last relative to the baseline fragment.
 - `common/droidspaces.fragment` starts as an empty generated fragment and is rewritten only when the selected variant enables `droidspaces` or `DROIDSPACES_ENABLE=1` forces it for local testing.
 - `common/features.fragment` starts as an empty generated fragment and is rewritten only by enabled feature hooks.
-- `android16-6.12-lts` intentionally rejects full-LTO override paths such as `CONFIG_LTO_CLANG_FULL=y` in repo-root `private.fragment`.
+- `android16-6.12-lts` requires ThinLTO and rejects full-LTO override paths such as `CONFIG_LTO_CLANG_FULL=y` in repo-root `private.fragment`.

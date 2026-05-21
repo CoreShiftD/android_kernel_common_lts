@@ -54,6 +54,46 @@ ensure_line_once() {
   trap - RETURN
 }
 
+normalize_makefile_entry() {
+  local makefile="$1"
+  local wanted_line="obj-\$(CONFIG_KSU) += kernelsu/"
+  local tmp_file
+
+  tmp_file="$(mktemp)"
+  trap 'rm -f "$tmp_file"' RETURN
+  grep -Fvx "$wanted_line" "$makefile" > "$tmp_file" || true
+  printf '%s\n' "$wanted_line" >> "$tmp_file"
+  mv "$tmp_file" "$makefile"
+  trap - RETURN
+}
+
+normalize_kconfig_entry() {
+  local kconfig_file="$1"
+  local source_line='source "drivers/kernelsu/Kconfig"'
+  local tmp_file
+  local tmp_out
+
+  tmp_file="$(mktemp)"
+  tmp_out="$(mktemp)"
+  trap 'rm -f "$tmp_file" "$tmp_out"' RETURN
+  grep -Fvx "$source_line" "$kconfig_file" > "$tmp_file" || true
+  awk -v source_line="$source_line" '
+    !inserted && $0 == "endmenu" {
+      print source_line
+      inserted = 1
+    }
+    { print }
+    END {
+      if (!inserted) {
+        print source_line
+      }
+    }
+  ' "$tmp_file" > "$tmp_out"
+  mv "$tmp_out" "$kconfig_file"
+  rm -f "$tmp_file"
+  trap - RETURN
+}
+
 find_drivers_dir() {
   local candidate
   for candidate in "$COMMON_DIR/drivers" "$WORKSPACE_DIR/drivers"; do
@@ -88,31 +128,45 @@ resolve_kernelsu_kernel_dir() {
   return 1
 }
 
-insert_kconfig_source() {
-  local kconfig_file="$1"
-  local source_line='source "drivers/kernelsu/Kconfig"'
-  local tmp_file
+find_source_setup_script() {
+  local root="$1"
+  local candidate
+  for candidate in "$root/kernel/setup.sh" "$root/setup.sh"; do
+    if [ -f "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
 
-  if grep -Fxq "$source_line" "$kconfig_file"; then
-    return 0
+normalize_drivers_kernelsu() {
+  local kernel_dir="$1"
+  local drivers_dir="$2"
+  local target="$drivers_dir/kernelsu"
+  local makefile="$drivers_dir/Makefile"
+  local kconfig="$drivers_dir/Kconfig"
+  local resolved_target=""
+
+  [ -f "$makefile" ] || {
+    echo "Drivers Makefile not found: $makefile" >&2
+    exit 1
+  }
+  [ -f "$kconfig" ] || {
+    echo "Drivers Kconfig not found: $kconfig" >&2
+    exit 1
+  }
+
+  if [ -e "$target" ] || [ -L "$target" ]; then
+    resolved_target="$(readlink -f "$target" || true)"
+  fi
+  if [ "$resolved_target" != "$kernel_dir" ]; then
+    rm -rf "$target"
+    ln -s "$kernel_dir" "$target"
   fi
 
-  tmp_file="$(mktemp)"
-  trap 'rm -f "$tmp_file"' RETURN
-  awk -v source_line="$source_line" '
-    !inserted && $0 == "endmenu" {
-      print source_line
-      inserted = 1
-    }
-    { print }
-    END {
-      if (!inserted) {
-        print source_line
-      }
-    }
-  ' "$kconfig_file" > "$tmp_file"
-  mv "$tmp_file" "$kconfig_file"
-  trap - RETURN
+  normalize_makefile_entry "$makefile"
+  normalize_kconfig_entry "$kconfig"
 }
 
 stage_drivers_kernelsu() {
@@ -138,8 +192,22 @@ stage_drivers_kernelsu() {
   fi
 
   ln -s "$kernel_dir" "$target"
-  ensure_line_once "obj-\$(CONFIG_KSU) += kernelsu/" "$makefile"
-  insert_kconfig_source "$kconfig"
+  normalize_makefile_entry "$makefile"
+  normalize_kconfig_entry "$kconfig"
+}
+
+run_source_setup() {
+  local setup_script="$1"
+  local setup_log="$2"
+
+  log "KernelSU: using source setup.sh"
+  : > "$setup_log"
+  if ! (cd "$COMMON_DIR" && sh "$setup_script" "$KSU_REF") >"$setup_log" 2>&1; then
+    echo "KernelSU: source setup.sh failed: $setup_script" >&2
+    sed -n '1,120p' "$setup_log" >&2
+    return 1
+  fi
+  log "KernelSU: setup completed"
 }
 
 prune_nested_git_metadata() {
@@ -172,14 +240,14 @@ fi
 
 if [ -d "$KSU_DIR/.git" ]; then
   git -C "$KSU_DIR" remote set-url origin "$KSU_REPO"
-  git -C "$KSU_DIR" fetch --depth 1 origin "$KSU_REF" || true
+  git -C "$KSU_DIR" fetch --quiet --depth 1 origin "$KSU_REF" || true
 else
-  git clone --depth 1 --branch "$KSU_REF" "$KSU_REPO" "$KSU_DIR" ||
-    git clone --depth 1 "$KSU_REPO" "$KSU_DIR"
-  git -C "$KSU_DIR" fetch --depth 1 origin "$KSU_REF" || true
+  git clone --quiet --depth 1 --branch "$KSU_REF" "$KSU_REPO" "$KSU_DIR" ||
+    git clone --quiet --depth 1 "$KSU_REPO" "$KSU_DIR"
+  git -C "$KSU_DIR" fetch --quiet --depth 1 origin "$KSU_REF" || true
 fi
 
-git -C "$KSU_DIR" checkout "$KSU_REF" || true
+git -C "$KSU_DIR" checkout -q "$KSU_REF" || true
 
 DRIVERS_DIR="$(find_drivers_dir || true)"
 [ -n "$DRIVERS_DIR" ] || {
@@ -193,7 +261,26 @@ KSU_KERNEL_DIR="$(resolve_kernelsu_kernel_dir "$KSU_DIR" || true)"
   exit 1
 }
 
-stage_drivers_kernelsu "$KSU_KERNEL_DIR" "$DRIVERS_DIR"
+KSU_SETUP_SCRIPT="$(find_source_setup_script "$KSU_DIR" || true)"
+KSU_SETUP_METHOD="fallback layout integration"
+KSU_TEMP_SETUP_LOG=""
+if [ -n "$KSU_LOG_DIR" ]; then
+  KSU_SETUP_LOG="$KSU_LOG_DIR/setup.log"
+else
+  KSU_TEMP_SETUP_LOG="$(mktemp)"
+  KSU_SETUP_LOG="$KSU_TEMP_SETUP_LOG"
+fi
+if [ -n "$KSU_SETUP_SCRIPT" ]; then
+  run_source_setup "$KSU_SETUP_SCRIPT" "$KSU_SETUP_LOG"
+  KSU_SETUP_METHOD="source setup.sh"
+  normalize_drivers_kernelsu "$KSU_KERNEL_DIR" "$DRIVERS_DIR"
+else
+  log "KernelSU: using fallback layout integration"
+  stage_drivers_kernelsu "$KSU_KERNEL_DIR" "$DRIVERS_DIR"
+fi
+if [ -n "$KSU_TEMP_SETUP_LOG" ]; then
+  rm -f "$KSU_TEMP_SETUP_LOG"
+fi
 ensure_line_once 'CONFIG_KSU=y' "$FEATURES_FRAGMENT"
 
 prune_nested_git_metadata "$KSU_DIR"
@@ -207,6 +294,10 @@ if [ -n "$KSU_LOG_DIR" ]; then
     echo "KernelSU source root: $KSU_DIR"
     echo "KernelSU kernel source path: $KSU_KERNEL_DIR"
     echo "KernelSU drivers link: $DRIVERS_DIR/kernelsu"
+    echo "KernelSU setup method: $KSU_SETUP_METHOD"
+    if [ -n "$KSU_SETUP_SCRIPT" ]; then
+      echo "KernelSU setup script: $KSU_SETUP_SCRIPT"
+    fi
   } > "$KSU_LOG_DIR/source.txt"
 fi
 rm -rf "$KSU_DIR/.github"
@@ -215,3 +306,4 @@ echo "KernelSU commit: $ksu_commit"
 echo "KernelSU source staged at: $KSU_DIR"
 echo "KernelSU kernel source path: $KSU_KERNEL_DIR"
 echo "KernelSU drivers link: $DRIVERS_DIR/kernelsu"
+echo "KernelSU setup method: $KSU_SETUP_METHOD"

@@ -54,6 +54,7 @@ EXTRA_ARGS=()
 PROFILE_LTO="full"
 EFFECTIVE_LTO=""
 EFFECTIVE_DROIDSPACES="0"
+KMI_VERSION=""
 has_build_env_key() {
   local wanted="$1"
   local existing_key
@@ -300,6 +301,13 @@ if [ ! -f "$PROFILE_JSON" ]; then
   exit 1
 fi
 
+if [[ "$PROFILE_NAME" =~ ^android[0-9]+-([0-9]+\.[0-9]+)-lts$ ]]; then
+  KMI_VERSION="${BASH_REMATCH[1]}"
+else
+  echo "Could not derive KMI from profile: $PROFILE_NAME" >&2
+  exit 1
+fi
+
 command -v python3 >/dev/null 2>&1 || {
   echo "Missing required tool: python3" >&2
   exit 1
@@ -348,7 +356,7 @@ fi
 
 if [ "$PROFILE_NAME" = "android16-6.12-lts" ]; then
   if [ "$USER_SET_LTO" -eq 1 ] && [ "$USER_LTO_VALUE" != "thin" ]; then
-    echo "android16-6.12-lts forces ThinLTO. Use LTO=thin or omit the override." >&2
+    echo "6.12 KMI requires ThinLTO. Use LTO=thin or omit the override." >&2
     exit 1
   fi
 
@@ -357,7 +365,7 @@ if [ "$PROFILE_NAME" = "android16-6.12-lts" ]; then
       --lto=thin)
         ;;
       --lto=full|--lto=none|--lto=default)
-        echo "android16-6.12-lts forces --lto=thin. Unsupported extra arg: $extra_arg" >&2
+        echo "6.12 KMI requires --lto=thin. Unsupported extra arg: $extra_arg" >&2
         exit 1
         ;;
     esac
@@ -725,21 +733,41 @@ fi
 
 echo
 echo "Build summary:"
-echo "  profile: $PROFILE_NAME"
-echo "  variant: $RESOLVED_VARIANT"
-echo "  workspace: $WORKSPACE_DIR"
-echo "  build mode: $SELECTED_MODE"
-echo "  artifacts: $ARTIFACT_DIR"
+echo "  Profile: $PROFILE_NAME"
+echo "  KMI: $KMI_VERSION"
+echo "  Variant: $RESOLVED_VARIANT"
+if [[ ",$CORESHIFT_FEATURES_VALUE," == *",droidspaces,"* ]]; then
+  echo "  Droidspaces: enabled"
+else
+  echo "  Droidspaces: disabled"
+fi
+if [[ ",$CORESHIFT_FEATURES_VALUE," == *",ksu,"* ]]; then
+  echo "  KernelSU: enabled"
+else
+  echo "  KernelSU: disabled"
+fi
+if [[ ",$CORESHIFT_FEATURES_VALUE," == *",susfs,"* ]]; then
+  echo "  SUSFS: enabled"
+else
+  echo "  SUSFS: disabled"
+fi
+echo "  Workspace: $WORKSPACE_DIR"
+echo "  Build mode: $SELECTED_MODE"
+echo "  Artifacts: $ARTIFACT_DIR"
 if [ -f "$ARTIFACT_DIR/ak3-zip-path.txt" ]; then
-  echo "  ak3 zip: $(cat "$ARTIFACT_DIR/ak3-zip-path.txt")"
+  echo "  AK3 zip: $(cat "$ARTIFACT_DIR/ak3-zip-path.txt")"
 fi
 if [ -n "$BUILD_CONFIG_OVERRIDE_VALUE" ]; then
-  echo "  build config override: $BUILD_CONFIG_OVERRIDE_VALUE"
+  echo "  Build config override: $BUILD_CONFIG_OVERRIDE_VALUE"
 fi
-echo "  effective LTO: ${EFFECTIVE_LTO:-}"
+if [ "$KMI_VERSION" = "6.12" ]; then
+  echo "  LTO: ThinLTO required for 6.12 KMI"
+else
+  echo "  LTO: ${EFFECTIVE_LTO:-}"
+fi
 if [ "$SELECTED_MODE" = "google_build_sh" ]; then
-  echo "  effective jobs: ${EFFECTIVE_JOBS:-}"
+  echo "  Jobs: ${EFFECTIVE_JOBS:-}"
 fi
-print_key_section "user build env" "${USER_BUILD_ENV_KEYS[@]}"
-print_key_section "default build env" "${DEFAULT_BUILD_ENV_KEYS[@]}"
-print_key_section "passthrough build env" "${PASSTHROUGH_BUILD_ENV_KEYS[@]}"
+print_key_section "User build env" "${USER_BUILD_ENV_KEYS[@]}"
+print_key_section "Default build env" "${DEFAULT_BUILD_ENV_KEYS[@]}"
+print_key_section "Passthrough build env" "${PASSTHROUGH_BUILD_ENV_KEYS[@]}"

@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "android11-5.4-lts": ["vanilla", "droidspaces"],
+    "android11-5.4-lts": ["vanilla", "droidspaces", "ksu", "ksu-susfs-bbg", "ksu-susfs-bbg-droidspaces"],
     "android12-5.4-lts": ["vanilla", "droidspaces", "ksu", "ksu-susfs-bbg", "ksu-susfs-bbg-droidspaces"],
     "android12-5.10-lts": ["vanilla", "droidspaces", "ksu", "ksu-susfs-bbg", "ksu-susfs-bbg-droidspaces"],
     "android13-5.10-lts": ["vanilla", "droidspaces", "ksu", "ksu-susfs-bbg", "ksu-susfs-bbg-droidspaces"],

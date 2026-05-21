@@ -17,10 +17,10 @@ from xml.sax.saxutils import escape
 VALID_OVERLAY_MODES = {"safe", "aggressive"}
 VALID_OVERLAY_POLICY_KEYS = {"safe", "aggressive"}
 VALID_OVERLAY_MODE_KEYS = {"remove_projects"}
-LEGACY_TRIM_FIELD = "manifest" "_trim"
-LEGACY_OVERLAY_FIELD = "overlay" "_manifest"
-LEGACY_PROFILE_REMOVE_FIELD = "remove_projects"
-LEGACY_KEEP_FIELD = "keep" "_patterns"
+REMOVED_TRIM_FIELD = "manifest" "_trim"
+REMOVED_OVERLAY_FIELD = "overlay" "_manifest"
+REMOVED_PROFILE_REMOVE_FIELD = "remove_projects"
+REMOVED_KEEP_FIELD = "keep" "_patterns"
 
 
 @dataclass(frozen=True)
@@ -137,17 +137,17 @@ def load_profile(profile_path: Path) -> ProfileConfig:
     if not isinstance(profile, dict):
         fail(f"{profile_path}: top-level JSON value must be an object")
 
-    if LEGACY_TRIM_FIELD in profile:
-        fail(f"{profile_path}: unsupported field {LEGACY_TRIM_FIELD!r}")
-    if LEGACY_OVERLAY_FIELD in profile:
-        fail(f"{profile_path}: unsupported field {LEGACY_OVERLAY_FIELD!r}")
-    if LEGACY_KEEP_FIELD in profile:
+    if REMOVED_TRIM_FIELD in profile:
+        fail(f"{profile_path}: unsupported field {REMOVED_TRIM_FIELD!r}")
+    if REMOVED_OVERLAY_FIELD in profile:
+        fail(f"{profile_path}: unsupported field {REMOVED_OVERLAY_FIELD!r}")
+    if REMOVED_KEEP_FIELD in profile:
         fail(
-            f"{profile_path}: profile-level field {LEGACY_KEEP_FIELD!r} is not supported"
+            f"{profile_path}: profile-level field {REMOVED_KEEP_FIELD!r} is not supported"
         )
-    if LEGACY_PROFILE_REMOVE_FIELD in profile:
+    if REMOVED_PROFILE_REMOVE_FIELD in profile:
         fail(
-            f"{profile_path}: profile-level field {LEGACY_PROFILE_REMOVE_FIELD!r} is not supported; "
+            f"{profile_path}: profile-level field {REMOVED_PROFILE_REMOVE_FIELD!r} is not supported; "
             "remove lists live in manifests/overlays/*.json"
         )
 
