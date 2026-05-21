@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "android12-5.4-lts": {
+      "ksu-susfs-bbg": {
+        "setup": "legacy-multisu",
+        "repo": "https://github.com/xxblebleblexx/MultiSU",
+        "ref": "legacy"
+      },
+      "ksu-susfs-bbg-droidspaces": {
+        "setup": "legacy-multisu",
+        "repo": "https://github.com/xxblebleblexx/MultiSU",
+        "ref": "legacy"
+      }
+    }
+  }
+}
