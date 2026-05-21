@@ -53,6 +53,7 @@ USER_LTO_VALUE=""
 EXTRA_ARGS=()
 PROFILE_LTO="full"
 EFFECTIVE_LTO=""
+EFFECTIVE_DROIDSPACES="0"
 has_build_env_key() {
   local wanted="$1"
   local existing_key
@@ -97,6 +98,34 @@ build_env_enabled() {
       ;;
   esac
   return 1
+}
+
+ccache_env_key() {
+  local key="$1"
+  case "$key" in
+    USE_CCACHE|CCACHE_*|CORESHIFT_CCACHE_DEBUG)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+remove_generated_path() {
+  local path="$1"
+  local resolved
+
+  [ -n "$path" ] || return 0
+  [ -e "$path" ] || return 0
+
+  resolved="$(cd "$(dirname "$path")" && pwd)/$(basename "$path")"
+  case "$resolved" in
+    /|"$REPO_ROOT"|"$REPO_ROOT/.git"|"$REPO_ROOT/scripts"|"$REPO_ROOT/configs"|"$REPO_ROOT/patches"|"$REPO_ROOT/profiles"|"$REPO_ROOT/docs"|"$REPO_ROOT/README.md")
+      echo "Refusing to remove protected path: $resolved" >&2
+      exit 1
+      ;;
+  esac
+
+  rm -rf "$resolved"
 }
 
 get_build_env_value() {
@@ -203,6 +232,10 @@ while [ "$#" -gt 0 ]; do
       build_env_value="${2#*=}"
       if ! [[ "$build_env_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
         echo "Invalid --build-env key: $build_env_key" >&2
+        exit 1
+      fi
+      if ccache_env_key "$build_env_key"; then
+        echo "ccache build environment is disabled for deterministic builds: $build_env_key" >&2
         exit 1
       fi
       if [ "$build_env_key" = "CORESHIFT_MANIFEST""_TRIM" ]; then
@@ -397,8 +430,59 @@ done
 
 mkdir -p "$(dirname "$WORKSPACE_DIR")" "$(dirname "$ARTIFACT_DIR")"
 
-if [ "$CLEAN" -eq 1 ]; then
-  rm -rf "$WORKSPACE_DIR" "$ARTIFACT_DIR"
+clean_repo_generated_state() {
+  local path
+  for path in "$REPO_ROOT/.ccache" "$REPO_ROOT/.cache" "$REPO_ROOT/out"; do
+    if [ -e "$path" ]; then
+      remove_generated_path "$path"
+      echo "Removed generated state: $path"
+    fi
+  done
+
+  while IFS= read -r -d '' path; do
+    remove_generated_path "$path"
+    echo "Removed generated state: $path"
+  done < <(find "$REPO_ROOT" -maxdepth 1 -mindepth 1 -type d -name 'bazel-*' -print0)
+}
+
+clean_workspace_generated_state() {
+  local workspace_path="$1"
+  local path
+
+  if [ ! -d "$workspace_path" ]; then
+    return 0
+  fi
+
+  for path in \
+    "$workspace_path/out" \
+    "$workspace_path/dist" \
+    "$workspace_path/output_user_root" \
+    "$workspace_path/.cache" \
+    "$workspace_path/.ccache" \
+    "$workspace_path/common/out" \
+    "$workspace_path/common/.cache" \
+    "$workspace_path/common/.ccache"
+  do
+    if [ -e "$path" ]; then
+      remove_generated_path "$path"
+      echo "Removed generated workspace state: $path"
+    fi
+  done
+
+  while IFS= read -r -d '' path; do
+    remove_generated_path "$path"
+    echo "Removed generated workspace state: $path"
+  done < <(find "$workspace_path" -maxdepth 1 -mindepth 1 -type d -name 'bazel-*' -print0 2>/dev/null || true)
+}
+
+clean_repo_generated_state
+
+if [ "$CLEAN" -eq 1 ] || [ "$SKIP_SETUP" -eq 0 ]; then
+  remove_generated_path "$WORKSPACE_DIR"
+  remove_generated_path "$ARTIFACT_DIR"
+  echo "Removed generated workspace/artifact directories for clean setup: $WORKSPACE_DIR $ARTIFACT_DIR"
+else
+  clean_workspace_generated_state "$WORKSPACE_DIR"
 fi
 
 if [ "$SKIP_SETUP" -eq 0 ]; then
@@ -427,23 +511,6 @@ fi
 "$REPO_ROOT/scripts/prepare-private-fragment.sh" "$PROFILE_JSON" "$WORKSPACE_DIR"
 
 for passthrough_key in \
-  CCACHE_DIR \
-  CCACHE_MAXSIZE \
-  CCACHE_BASEDIR \
-  CCACHE_NOHASHDIR \
-  CCACHE_COMPILERCHECK \
-  CCACHE_IGNOREOPTIONS \
-  CCACHE_COMPRESSION \
-  CCACHE_COMPRESSION_LEVEL \
-  CCACHE_DIRECT \
-  CCACHE_FILE_CLONE \
-  CCACHE_INODE_CACHE \
-  CCACHE_UMASK \
-  CCACHE_SLOPPINESS \
-  CCACHE_LOGFILE \
-  CCACHE_WRAPPER_DIR \
-  CCACHE_PATH \
-  CORESHIFT_CCACHE_DEBUG \
   CORESHIFT_REPO_JOBS \
   CORESHIFT_REPO_DEPTH \
   CORESHIFT_REPO_PARTIAL_CLONE \
@@ -458,11 +525,12 @@ for passthrough_key in \
   DROIDSPACES_ENABLE \
   DROIDSPACES_REPO \
   DROIDSPACES_REF \
-  DROIDSPACES_SYSVIPC_KABI_SLOT \
-  USE_CCACHE
+  DROIDSPACES_SYSVIPC_KABI_SLOT
 do
   append_passthrough_build_env_if_unset "$passthrough_key"
 done
+
+add_default_build_env "USE_CCACHE" "0"
 
 resolve_mode() {
   if [ "$MODE" != "auto" ]; then
@@ -540,6 +608,36 @@ do
   fi
 done
 
+resolve_droidspaces_enable() {
+  local value
+
+  if has_build_env_key "DROIDSPACES_ENABLE"; then
+    value="$(get_build_env_value "DROIDSPACES_ENABLE")"
+    case "$value" in
+      1|true|TRUE|yes|YES|on|ON)
+        printf '1\n'
+        return 0
+        ;;
+      0|false|FALSE|no|NO|off|OFF)
+        printf '0\n'
+        return 0
+        ;;
+      *)
+        echo "DROIDSPACES_ENABLE must be 1/0, true/false, yes/no, or on/off: $value" >&2
+        exit 1
+        ;;
+    esac
+  fi
+
+  if [[ ",$CORESHIFT_FEATURES_VALUE," == *",droidspaces,"* ]]; then
+    printf '1\n'
+  else
+    printf '0\n'
+  fi
+}
+
+EFFECTIVE_DROIDSPACES="$(resolve_droidspaces_enable)"
+
 if [ "$is_54_profile" -eq 1 ]; then
   "$REPO_ROOT/scripts/patch-54-uapi-sysroot.sh" "$WORKSPACE_DIR"
   echo "Applied 5.4 UAPI sysroot patch"
@@ -558,8 +656,10 @@ if [ "$is_54_profile" -eq 1 ]; then
   fi
 fi
 
-if build_env_enabled "${DROIDSPACES_ENABLE:-0}"; then
+if [ "$EFFECTIVE_DROIDSPACES" = "1" ]; then
   "$REPO_ROOT/scripts/apply-droidspaces-gki-support.sh" "$WORKSPACE_DIR"
+else
+  echo "Droidspaces disabled for profile: $PROFILE_NAME"
 fi
 
 "$REPO_ROOT/scripts/apply-features.sh" "$WORKSPACE_DIR" "$CORESHIFT_FEATURES_VALUE" "$PROFILE_NAME"
@@ -572,30 +672,10 @@ if [ "$DISABLE_KMI_CHECK" = "on" ]; then
   "$REPO_ROOT/scripts/disable-kmi-check.sh" "$WORKSPACE_DIR"
 fi
 
-if [ "$SELECTED_MODE" = "google_build_sh" ] && command -v ccache >/dev/null 2>&1; then
-  # shellcheck source=/dev/null
-  . "$REPO_ROOT/scripts/setup-ccache-wrappers.sh" "$WORKSPACE_DIR" "$EFFECTIVE_BUILD_CONFIG"
-  append_passthrough_build_env_if_unset "CORESHIFT_CCACHE_WRAPPERS_ENABLED"
-  if [ "${CORESHIFT_CCACHE_WRAPPERS_ENABLED:-0}" = "1" ]; then
-    append_passthrough_build_env_if_unset "CCACHE_WRAPPER_DIR"
-    append_passthrough_build_env_if_unset "CCACHE_PATH"
-    echo "google_build_sh compiler diagnostics:"
-    command -v clang
-    clang --version | head -n 1 || true
-    ccache -s || true
-  else
-    echo "ccache wrappers disabled; continuing without compiler interception."
-  fi
-fi
-
 if [ "$NO_COMMIT_WORKSPACE" -eq 0 ]; then
   "$REPO_ROOT/scripts/commit-workspace-changes.sh" "$WORKSPACE_DIR"
 else
   echo "Skipping workspace commit because --no-commit-workspace was requested."
-fi
-
-if has_build_env_key "CORESHIFT_CCACHE_DEBUG" && ! has_build_env_key "CCACHE_LOGFILE"; then
-  add_default_build_env "CCACHE_LOGFILE" "$WORKSPACE_DIR/ccache.log"
 fi
 
 run_cmd=(

@@ -22,6 +22,13 @@ Build a profile with a variant:
 ./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs-bbg
 ```
 
+Build with Droidspaces GKI support:
+
+```bash
+./scripts/build-kernel.sh android16-6.12-lts --variant droidspaces
+./scripts/build-kernel.sh android16-6.12-lts --variant ksu-susfs-bbg-droidspaces
+```
+
 Pin a SUSFS ref:
 
 ```bash
@@ -29,7 +36,7 @@ Pin a SUSFS ref:
   --build-env SUSFS_REF=<branch-or-commit>
 ```
 
-Enable Droidspaces support on a GKI profile:
+Force-enable Droidspaces support for local testing:
 
 ```bash
 ./scripts/build-kernel.sh android15-6.6-lts \
@@ -64,7 +71,7 @@ cp configs/fragments/private.fragment.example private.fragment
 
 ## Installing host tooling
 
-`./scripts/install-build-tools.sh` installs the normal Ubuntu build packages, Arm64 cross-libc headers, `ccache`, and the upstream `repo` launcher in `$HOME/.local/bin/repo`.
+`./scripts/install-build-tools.sh` installs the normal Ubuntu build packages, Arm64 cross-libc headers, and the upstream `repo` launcher in `$HOME/.local/bin/repo`.
 
 ## Build environment passthrough
 
@@ -75,19 +82,50 @@ cp configs/fragments/private.fragment.example private.fragment
 - `BBG_REF=<commit-or-tag>`
 - `SUSFS_REF=<branch-or-commit>`
 - `DROIDSPACES_ENABLE=1`
+- `DROIDSPACES_ENABLE=0`
 - `DROIDSPACES_SYSVIPC_KABI_SLOT=6_7_8`
 - `CORESHIFT_REPO_JOBS=2`
 - `CORESHIFT_REPO_PARTIAL_CLONE=0`
 - `CORESHIFT_REPO_CLONE_FILTER=blob:none`
-- `USE_CCACHE=1`
 
 The workflows also expose `build_env` input in `Build.yml` for advanced per-run overrides.
 
+ccache build environment keys are intentionally rejected. CoreShift sets `USE_CCACHE=0` by default and does not configure ccache wrappers.
+
+## Clean build state
+
+CI and normal `scripts/build-kernel.sh` setup remove generated state before sync/build to avoid stale cache behavior:
+
+- `.work/`
+- `.ccache/`
+- `.cache/`
+- `out/`
+- `bazel-*`
+
+The cleanup is limited to generated cache/work/output paths. Source directories such as `.git/`, `scripts/`, `configs/`, `patches/`, `profiles/`, `docs/`, and `README.md` are not removed.
+
 ## Droidspaces GKI support
 
-`DROIDSPACES_ENABLE=1` runs `scripts/apply-droidspaces-gki-support.sh` against the prepared workspace before the normal feature hooks. The helper is opt-in, supports GKI kernels only, selects the upstream patch set from kernel version, updates `common/arch/arm64/configs/gki_defconfig` idempotently, and only adds the required IPC symbol exports for 6.12+ kernels.
+Droidspaces is enabled by selecting a variant whose feature list includes `droidspaces`, such as `droidspaces`, `bbg-droidspaces`, `ksu-droidspaces`, or `ksu-susfs-bbg-droidspaces`. Profiles allow Droidspaces by listing those variants in `configs/profile-variants.json`.
+
+`scripts/apply-droidspaces-gki-support.sh` runs against the prepared workspace before the normal feature hooks when the selected variant includes `droidspaces`. The helper supports GKI kernels only, selects the upstream patch set from kernel version, writes the required Kconfig entries into `common/droidspaces.fragment`, refreshes `common/coreshift.kleaf.fragment`, and only adds the required IPC symbol exports for 6.12+ kernels.
+
+`DROIDSPACES_ENABLE` is a developer override, not the normal enablement path:
+
+- unset: follow the selected variant feature list
+- `DROIDSPACES_ENABLE=1`: force-enable Droidspaces for local testing
+- `DROIDSPACES_ENABLE=0`: force-disable Droidspaces for local testing
+
+The generated `common/droidspaces.fragment` contains the required IPC, namespace, devtmpfs, netfilter/ipset, and tmpfs xattr options. It is merged between `common/lto.fragment` and `common/features.fragment` for both `google_build_sh` and Kleaf paths.
 
 The pre-6.12 `SYSVIPC` patch defaults to `DROIDSPACES_SYSVIPC_KABI_SLOT=6_7_8`. Supported override values are `1_2_3`, `3_4_5`, and `6_7_8`.
+
+Patch selection is version-aware:
+
+- GKI below 6.12 uses `GKI/below-kernel-6.12`.
+- GKI 5.10 and lower also applies the POSIX mqueue padding patch.
+- GKI 6.12 and newer uses `GKI/kernel-6.12/001.GKI-6.12-or-above-fix_sysvipc_kabi.patch`.
+- IPC symbol exports are added only for GKI 6.12 and newer.
 
 ## Private-build escape hatches
 

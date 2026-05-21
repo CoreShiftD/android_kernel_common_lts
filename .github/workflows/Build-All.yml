@@ -29,32 +29,18 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Restore ccache
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ccache
-          key: ccache-${{ runner.os }}-${{ matrix.profile }}-${{ hashFiles('profiles/*.json', 'scripts/**', 'configs/fragments/coreshift.fragment') }}
-          restore-keys: |
-            ccache-${{ runner.os }}-${{ matrix.profile }}-
-            ccache-${{ runner.os }}-
-
       - name: Install build tools
         shell: bash
         run: ./scripts/install-build-tools.sh
 
-      - name: Setup ccache
+      - name: Clean generated state
         shell: bash
-        run: ./scripts/setup-ccache.sh
+        run: |
+          rm -rf .work .ccache .cache out bazel-*
 
       - name: Add swap
         shell: bash
         run: ./scripts/add-swap.sh 16 --aggressive
-
-      - name: Ccache stats before build
-        shell: bash
-        run: |
-          ccache -s || true
-          ccache --show-config || true
 
       - name: Prepare log metadata
         shell: bash
@@ -92,13 +78,6 @@ jobs:
           status="${PIPESTATUS[0]}"
           echo "$status" > "$LOG_DIR/build-exit-code.txt"
           exit "$status"
-
-      - name: Ccache stats after build
-        if: always()
-        shell: bash
-        run: |
-          ccache -s || true
-          ccache --show-config || true
 
       - name: List AK3 zip artifacts
         shell: bash

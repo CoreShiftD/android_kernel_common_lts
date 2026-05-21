@@ -76,22 +76,14 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Restore ccache
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ccache
-          key: ccache-${{ runner.os }}-${{ matrix.profile }}-${{ hashFiles('profiles/*.json', 'scripts/**', 'configs/**') }}
-          restore-keys: |
-            ccache-${{ runner.os }}-${{ matrix.profile }}-
-            ccache-${{ runner.os }}-
-
       - name: Install build tools
         shell: bash
         run: ./scripts/install-build-tools.sh
 
-      - name: Setup ccache
+      - name: Clean generated state
         shell: bash
-        run: ./scripts/setup-ccache.sh
+        run: |
+          rm -rf .work .ccache .cache out bazel-*
 
       - name: Add swap
         shell: bash

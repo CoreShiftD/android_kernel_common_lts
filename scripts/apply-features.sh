@@ -19,6 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMMON_DIR="$WORKSPACE_DIR/common"
 PRIVATE_FRAGMENT="$COMMON_DIR/private.fragment"
 LTO_FRAGMENT="$COMMON_DIR/lto.fragment"
+DROIDSPACES_FRAGMENT="$COMMON_DIR/droidspaces.fragment"
 FEATURES_FRAGMENT="$COMMON_DIR/features.fragment"
 KLEAF_FRAGMENT="$COMMON_DIR/coreshift.kleaf.fragment"
 
@@ -35,14 +36,15 @@ feature_requested() {
 }
 
 sync_kleaf_fragment() {
-  python3 - "$PRIVATE_FRAGMENT" "$LTO_FRAGMENT" "$FEATURES_FRAGMENT" "$KLEAF_FRAGMENT" <<'PY'
+  python3 - "$PRIVATE_FRAGMENT" "$LTO_FRAGMENT" "$DROIDSPACES_FRAGMENT" "$FEATURES_FRAGMENT" "$KLEAF_FRAGMENT" <<'PY'
 from pathlib import Path
 import sys
 
 private_fragment = Path(sys.argv[1])
 lto_fragment = Path(sys.argv[2])
-features_fragment = Path(sys.argv[3])
-kleaf_fragment = Path(sys.argv[4])
+droidspaces_fragment = Path(sys.argv[3])
+features_fragment = Path(sys.argv[4])
+kleaf_fragment = Path(sys.argv[5])
 
 def read_normalized(path: Path) -> str:
     if not path.exists():
@@ -57,13 +59,14 @@ def with_trailing_newline(text: str) -> str:
 combined = (
     with_trailing_newline(read_normalized(private_fragment))
     + with_trailing_newline(read_normalized(lto_fragment))
+    + with_trailing_newline(read_normalized(droidspaces_fragment))
     + with_trailing_newline(read_normalized(features_fragment))
 )
 kleaf_fragment.write_text(combined, encoding="utf-8")
 PY
 }
 
-for required_path in "$COMMON_DIR" "$PRIVATE_FRAGMENT" "$LTO_FRAGMENT" "$FEATURES_FRAGMENT"; do
+for required_path in "$COMMON_DIR" "$PRIVATE_FRAGMENT" "$LTO_FRAGMENT" "$DROIDSPACES_FRAGMENT" "$FEATURES_FRAGMENT"; do
   if [ ! -e "$required_path" ]; then
     echo "Required fragment path not found: $required_path" >&2
     exit 1
@@ -77,7 +80,7 @@ if [ -n "$FEATURES_CSV" ]; then
     feature="$(printf '%s' "$raw_feature" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
     [ -n "$feature" ] || continue
     case "$feature" in
-      ksu|bbg|susfs)
+      ksu|bbg|susfs|droidspaces)
         if ! feature_requested "$feature" "${trimmed_features[@]}"; then
           trimmed_features+=("$feature")
         fi

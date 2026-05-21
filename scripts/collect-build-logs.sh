@@ -70,6 +70,7 @@ copy_if_exists "$WORKSPACE_DIR/manifest-trim-report.txt" "workspace/manifest-tri
 copy_if_exists "$WORKSPACE_DIR/.repo/local_manifests/coreshift-overlay.xml" "workspace/coreshift-overlay.xml"
 copy_if_exists "$WORKSPACE_DIR/common/features.fragment" "workspace/common/features.fragment"
 copy_if_exists "$WORKSPACE_DIR/common/lto.fragment" "workspace/common/lto.fragment"
+copy_if_exists "$WORKSPACE_DIR/common/droidspaces.fragment" "workspace/common/droidspaces.fragment"
 copy_if_exists "$WORKSPACE_DIR/common/private.required" "workspace/common/private.required"
 copy_if_exists "$WORKSPACE_DIR/common/coreshift.kleaf.fragment" "workspace/common/coreshift.kleaf.fragment"
 copy_if_exists "$WORKSPACE_DIR/common/.config" "workspace/common/.config"

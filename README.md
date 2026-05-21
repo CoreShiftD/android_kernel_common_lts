@@ -34,8 +34,7 @@ Build a variant:
 Enable Droidspaces on a GKI profile:
 
 ```bash
-./scripts/build-kernel.sh android15-6.6-lts \
-  --build-env DROIDSPACES_ENABLE=1
+./scripts/build-kernel.sh android16-6.12-lts --variant droidspaces
 ```
 
 Use a local private fragment:
@@ -55,15 +54,15 @@ cp configs/fragments/private.fragment.example private.fragment
 
 | Profile | LTO | Variants |
 | --- | --- | --- |
-| `android11-5.4-lts` | `full` | `vanilla`, `bbg` |
-| `android12-5.4-lts` | `full` | `vanilla`, `bbg` |
-| `android12-5.10-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
-| `android13-5.10-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
-| `android13-5.15-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
-| `android14-5.15-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
-| `android14-6.1-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
-| `android15-6.6-lts` | `full` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
-| `android16-6.12-lts` | `thin` | `vanilla`, `bbg`, `ksu`, `ksu-bbg`, `ksu-susfs`, `ksu-susfs-bbg` |
+| `android11-5.4-lts` | `full` | `vanilla`, `bbg`, `droidspaces`, `bbg-droidspaces` |
+| `android12-5.4-lts` | `full` | `vanilla`, `bbg`, `droidspaces`, `bbg-droidspaces` |
+| `android12-5.10-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
+| `android13-5.10-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
+| `android13-5.15-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
+| `android14-5.15-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
+| `android14-6.1-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
+| `android15-6.6-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
+| `android16-6.12-lts` | `thin` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
 
 ## Documentation
 

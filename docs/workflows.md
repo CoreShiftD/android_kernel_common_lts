@@ -28,7 +28,8 @@
 ## CI build environment
 
 - CI installs host tools with `scripts/install-build-tools.sh`
-- CI configures ccache
+- CI does not restore or save ccache, workspace, repo, Bazel, Kleaf, or kernel output caches
+- CI cleans generated build state before sync/build so stale cache state cannot persist across runs
 - CI adds aggressive 24 GB swap on GitHub-hosted runners
 - All workflows opt into Node.js 24 for JavaScript actions with `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`
 - This avoids Node.js 20 deprecation annotations while keeping the current action pins unchanged
