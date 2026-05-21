@@ -1,0 +1,17 @@
+diff --git a/fs/proc/task_mmu.c b/fs/proc/task_mmu.c
+index 07e32af..c469532 100644
+--- a/fs/proc/task_mmu.c
++++ b/fs/proc/task_mmu.c
+@@ -1343,6 +1343,13 @@ static int show_smap(struct seq_file *m, void *v)
+ 	struct vm_area_struct *vma = v;
+ 	struct mem_size_stats mss = {};
+ 
++#ifdef CONFIG_KSU_SUSFS_SUS_MAP
++	if (vma->vm_file) {
++		if (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
++			return 0;
++	}
++#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
++
+ 	if (!vma_data_pages(vma))
+ 		goto show_pad;

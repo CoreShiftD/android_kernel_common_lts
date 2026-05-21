@@ -131,12 +131,25 @@ default_text = read_normalized(default_fragment)
 user_text = read_normalized(user_fragment)
 
 if profile_name == "android16-6.12-lts":
+    profile_lto = "thin"
+    forbidden_lines = {
+        "CONFIG_LTO_NONE=y": (
+            "android16-6.12-lts forces ThinLTO and does not allow "
+            "CONFIG_LTO_NONE=y in private.fragment."
+        ),
+        "CONFIG_LTO_CLANG_FULL=y": (
+            "android16-6.12-lts does not allow CONFIG_LTO_CLANG_FULL=y in "
+            "private.fragment because full LTO breaks rust_binder.ko output."
+        ),
+        "# CONFIG_LTO_CLANG_THIN is not set": (
+            "android16-6.12-lts forces ThinLTO and does not allow "
+            "# CONFIG_LTO_CLANG_THIN is not set in private.fragment."
+        ),
+    }
     for line in user_text.splitlines():
-        if line.strip() == "CONFIG_LTO_CLANG_FULL=y":
-            raise SystemExit(
-                "android16-6.12-lts does not allow CONFIG_LTO_CLANG_FULL=y in "
-                "private.fragment because full LTO breaks rust_binder.ko output."
-            )
+        stripped = line.strip()
+        if stripped in forbidden_lines:
+            raise SystemExit(forbidden_lines[stripped])
 
 if default_text:
     parts.append(default_text if default_text.endswith("\n") else default_text + "\n")

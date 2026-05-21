@@ -313,18 +313,24 @@ if [ "$USER_SET_LTO" -eq 1 ]; then
   EFFECTIVE_LTO="$USER_LTO_VALUE"
 fi
 
-if [ "$PROFILE_NAME" = "android16-6.12-lts" ] && [ "$USER_SET_LTO" -eq 1 ] && [ "$USER_LTO_VALUE" = "full" ]; then
-  echo "android16-6.12-lts does not allow LTO=full because full LTO breaks the Kleaf/Rust binder module output. Use thin/default/none." >&2
-  exit 1
-fi
-
 if [ "$PROFILE_NAME" = "android16-6.12-lts" ]; then
+  if [ "$USER_SET_LTO" -eq 1 ] && [ "$USER_LTO_VALUE" != "thin" ]; then
+    echo "android16-6.12-lts forces ThinLTO. Use LTO=thin or omit the override." >&2
+    exit 1
+  fi
+
   for extra_arg in "${EXTRA_ARGS[@]}"; do
-    if [ "$extra_arg" = "--lto=full" ]; then
-      echo "android16-6.12-lts does not allow --lto=full." >&2
-      exit 1
-    fi
+    case "$extra_arg" in
+      --lto=thin)
+        ;;
+      --lto=full|--lto=none|--lto=default)
+        echo "android16-6.12-lts forces --lto=thin. Unsupported extra arg: $extra_arg" >&2
+        exit 1
+        ;;
+    esac
   done
+
+  EFFECTIVE_LTO="thin"
 fi
 
 matrix_json="$(
