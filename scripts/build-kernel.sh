@@ -89,6 +89,16 @@ append_passthrough_build_env_if_unset() {
   PASSTHROUGH_BUILD_ENV_KEYS+=("$key")
 }
 
+build_env_enabled() {
+  local value="${1:-}"
+  case "$value" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 get_build_env_value() {
   local wanted="$1"
   local entry
@@ -439,6 +449,10 @@ for passthrough_key in \
   KSU_REF \
   SUSFS_REPO \
   SUSFS_REF \
+  DROIDSPACES_ENABLE \
+  DROIDSPACES_REPO \
+  DROIDSPACES_REF \
+  DROIDSPACES_SYSVIPC_KABI_SLOT \
   USE_CCACHE
 do
   append_passthrough_build_env_if_unset "$passthrough_key"
@@ -503,7 +517,18 @@ if [ "$SELECTED_MODE" = "google_build_sh" ]; then
   EFFECTIVE_JOBS="$(get_build_env_value "CORESHIFT_JOBS")"
 fi
 
-for feature_env_key in BBG_REPO BBG_REF KSU_REPO KSU_REF SUSFS_REPO SUSFS_REF; do
+for feature_env_key in \
+  BBG_REPO \
+  BBG_REF \
+  KSU_REPO \
+  KSU_REF \
+  SUSFS_REPO \
+  SUSFS_REF \
+  DROIDSPACES_ENABLE \
+  DROIDSPACES_REPO \
+  DROIDSPACES_REF \
+  DROIDSPACES_SYSVIPC_KABI_SLOT
+do
   if has_build_env_key "$feature_env_key"; then
     export "$feature_env_key=$(get_build_env_value "$feature_env_key")"
   fi
@@ -525,6 +550,10 @@ if [ "$is_54_profile" -eq 1 ]; then
     add_default_build_env "UAPI_SYSROOT_CFLAGS" "--target=aarch64-linux-gnu -isystem /usr/aarch64-linux-gnu/include"
     echo "Auto-added UAPI_SYSROOT_CFLAGS for 5.4 header tests: /usr/aarch64-linux-gnu/include"
   fi
+fi
+
+if build_env_enabled "${DROIDSPACES_ENABLE:-0}"; then
+  "$REPO_ROOT/scripts/apply-droidspaces-gki-support.sh" "$WORKSPACE_DIR"
 fi
 
 "$REPO_ROOT/scripts/apply-features.sh" "$WORKSPACE_DIR" "$CORESHIFT_FEATURES_VALUE" "$PROFILE_NAME"

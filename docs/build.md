@@ -29,6 +29,21 @@ Pin a SUSFS ref:
   --build-env SUSFS_REF=<branch-or-commit>
 ```
 
+Enable Droidspaces support on a GKI profile:
+
+```bash
+./scripts/build-kernel.sh android15-6.6-lts \
+  --build-env DROIDSPACES_ENABLE=1
+```
+
+Select a different pre-6.12 SYSVIPC kABI slot if needed:
+
+```bash
+./scripts/build-kernel.sh android13-5.15-lts \
+  --build-env DROIDSPACES_ENABLE=1 \
+  --build-env DROIDSPACES_SYSVIPC_KABI_SLOT=3_4_5
+```
+
 ## `build-kernel.sh` usage
 
 ```bash
@@ -59,12 +74,20 @@ cp configs/fragments/private.fragment.example private.fragment
 - `KSU_REF=<commit-or-tag>`
 - `BBG_REF=<commit-or-tag>`
 - `SUSFS_REF=<branch-or-commit>`
+- `DROIDSPACES_ENABLE=1`
+- `DROIDSPACES_SYSVIPC_KABI_SLOT=6_7_8`
 - `CORESHIFT_REPO_JOBS=2`
 - `CORESHIFT_REPO_PARTIAL_CLONE=0`
 - `CORESHIFT_REPO_CLONE_FILTER=blob:none`
 - `USE_CCACHE=1`
 
 The workflows also expose `build_env` input in `Build.yml` for advanced per-run overrides.
+
+## Droidspaces GKI support
+
+`DROIDSPACES_ENABLE=1` runs `scripts/apply-droidspaces-gki-support.sh` against the prepared workspace before the normal feature hooks. The helper is opt-in, supports GKI kernels only, selects the upstream patch set from kernel version, updates `common/arch/arm64/configs/gki_defconfig` idempotently, and only adds the required IPC symbol exports for 6.12+ kernels.
+
+The pre-6.12 `SYSVIPC` patch defaults to `DROIDSPACES_SYSVIPC_KABI_SLOT=6_7_8`. Supported override values are `1_2_3`, `3_4_5`, and `6_7_8`.
 
 ## Private-build escape hatches
 
