@@ -51,5 +51,5 @@ They support branch sync, repo validation, and manifest workspace validation rat
 - Does not package AK3
 - Uploads manifest log artifacts separately from manifest report and overlay artifacts
 - Has no mode input
-- Accepts `extra_remove_projects` only for temporary test runs
+- Accepts `extra_remove_projects` only for per-run manifest tests
 - Stable keep/remove rules should be promoted into `manifests/overlays/<profile>.json` after a successful manifest test

@@ -154,7 +154,7 @@ PY
 detect_kernel_version() {
   local version_output
   version_output="$(
-    python3 - "$MAKEFILE_PATH" "$COMMON_DIR/include/config/kernel.release" <<'PY'
+    python3 - "$MAKEFILE_PATH" "$COMMON_DIR/include/config/kernel.release" 2>&1 <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -188,7 +188,6 @@ if release_path.is_file():
 
 raise SystemExit("Could not detect kernel version from Makefile or include/config/kernel.release")
 PY
-  2>&1
   )" || fail "$version_output"
 
   printf '%s\n' "$version_output"

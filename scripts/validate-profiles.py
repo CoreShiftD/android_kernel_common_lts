@@ -96,12 +96,12 @@ def validate_profile(path: Path, repo_root: Path) -> str:
 
     if LEGACY_TRIM_FIELD in data:
         fail(
-            f"{path}: legacy field {LEGACY_TRIM_FIELD!r} is not supported; "
+            f"{path}: unsupported field {LEGACY_TRIM_FIELD!r}; "
             "profiles must select manifest_overlay JSON policies instead"
         )
     if LEGACY_OVERLAY_FIELD in data:
         fail(
-            f"{path}: legacy field {LEGACY_OVERLAY_FIELD!r} is not supported; "
+            f"{path}: unsupported field {LEGACY_OVERLAY_FIELD!r}; "
             "use manifest_overlay"
         )
     if LEGACY_KEEP_FIELD in data:

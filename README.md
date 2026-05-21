@@ -31,7 +31,7 @@ Build a variant:
 ./scripts/build-kernel.sh android12-5.10-lts --variant ksu-bbg
 ```
 
-Enable Droidspaces on a GKI profile:
+Enable config-driven Droidspaces on a GKI profile:
 
 ```bash
 ./scripts/build-kernel.sh android16-6.12-lts --variant droidspaces

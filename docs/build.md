@@ -106,7 +106,7 @@ The cleanup is limited to generated cache/work/output paths. Source directories 
 
 ## Droidspaces GKI support
 
-Droidspaces is enabled by selecting a variant whose feature list includes `droidspaces`, such as `droidspaces`, `bbg-droidspaces`, `ksu-droidspaces`, or `ksu-susfs-bbg-droidspaces`. Profiles allow Droidspaces by listing those variants in `configs/profile-variants.json`.
+Droidspaces is config-driven, not env-only. It is enabled by selecting a variant whose feature list includes `droidspaces`, such as `droidspaces`, `bbg-droidspaces`, `ksu-droidspaces`, or `ksu-susfs-bbg-droidspaces`. Profiles allow Droidspaces by listing those variants in `configs/profile-variants.json`.
 
 `scripts/apply-droidspaces-gki-support.sh` runs against the prepared workspace before the normal feature hooks when the selected variant includes `droidspaces`. The helper supports GKI kernels only, selects the upstream patch set from kernel version, writes the required Kconfig entries into `common/droidspaces.fragment`, refreshes `common/coreshift.kleaf.fragment`, and only adds the required IPC symbol exports for 6.12+ kernels.
 

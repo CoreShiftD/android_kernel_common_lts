@@ -127,10 +127,7 @@ echo "  workspace path: $WORKSPACE_DIR"
 
   repo_init_log="$(mktemp)"
   repo_sync_log="$(mktemp)"
-  cleanup_logs() {
-    rm -f "$repo_init_log" "$repo_sync_log"
-  }
-  trap cleanup_logs EXIT
+  trap 'rm -f "$repo_init_log" "$repo_sync_log"' EXIT
 
   if [ -e .repo ] && [ ! -d .repo ]; then
     echo "Workspace has a non-directory .repo entry: $WORKSPACE_DIR/.repo" >&2

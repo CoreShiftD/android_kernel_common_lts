@@ -138,9 +138,9 @@ def load_profile(profile_path: Path) -> ProfileConfig:
         fail(f"{profile_path}: top-level JSON value must be an object")
 
     if LEGACY_TRIM_FIELD in profile:
-        fail(f"{profile_path}: legacy field {LEGACY_TRIM_FIELD!r} is not supported")
+        fail(f"{profile_path}: unsupported field {LEGACY_TRIM_FIELD!r}")
     if LEGACY_OVERLAY_FIELD in profile:
-        fail(f"{profile_path}: legacy field {LEGACY_OVERLAY_FIELD!r} is not supported")
+        fail(f"{profile_path}: unsupported field {LEGACY_OVERLAY_FIELD!r}")
     if LEGACY_KEEP_FIELD in profile:
         fail(
             f"{profile_path}: profile-level field {LEGACY_KEEP_FIELD!r} is not supported"

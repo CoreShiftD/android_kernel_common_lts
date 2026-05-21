@@ -565,14 +565,9 @@ resolve_mode() {
 SELECTED_MODE="$(resolve_mode)"
 EFFECTIVE_JOBS=""
 BUILD_CONFIG_OVERRIDE_VALUE=""
-EFFECTIVE_BUILD_CONFIG=""
 
 if [ "$SELECTED_MODE" = "google_build_sh" ] && [ -f "$WORKSPACE_DIR/common/build.config.coreshift.gki.aarch64" ]; then
   BUILD_CONFIG_OVERRIDE_VALUE="common/build.config.coreshift.gki.aarch64"
-fi
-
-if [ "$SELECTED_MODE" = "google_build_sh" ]; then
-  EFFECTIVE_BUILD_CONFIG="${BUILD_CONFIG_OVERRIDE_VALUE:-$BUILD_CONFIG}"
 fi
 
 if [ "$SELECTED_MODE" = "google_build_sh" ]; then

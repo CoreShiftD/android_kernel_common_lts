@@ -49,13 +49,13 @@ This keeps manifest branch selection and `kernel/common` branch selection under 
 
 Current profiles all use safe mode. Aggressive mode is experimental and is enabled only by editing the profile JSON.
 
-Every setup run writes `manifest-trim-report.txt` in the workspace root with project counts, removed projects, the selected overlay policy, and any temporary extra remove overrides.
+Every setup run writes `manifest-trim-report.txt` in the workspace root with project counts, removed projects, the selected overlay policy, and any per-run extra remove overrides.
 
 ## Test workflow overrides
 
 Normal builds do not expose manifest trim flags.
 
-`Test-Manifest-Trim.yml` accepts temporary comma-separated overrides:
+`Test-Manifest-Trim.yml` accepts per-run comma-separated overrides:
 
 - `extra_remove_projects`
 
