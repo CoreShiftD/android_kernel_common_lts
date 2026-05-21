@@ -30,7 +30,6 @@ APT_PACKAGES=(
   gcc-aarch64-linux-gnu
   libc6-dev-arm64-cross
   linux-libc-dev-arm64-cross
-  ccache
 )
 
 if ! command -v apt-get >/dev/null 2>&1; then
@@ -70,7 +69,6 @@ required_tools=(
   flex
   rsync
   zstd
-  ccache
   zip
   unzip
   strings
@@ -111,4 +109,3 @@ repo --version || true
 aarch64-linux-gnu-gcc --version | head -n 1 || true
 pahole --version || true
 zstd --version || true
-ccache --version | head -n 1 || true

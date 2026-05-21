@@ -10,6 +10,16 @@
       "features": ["bbg"],
       "ak3_suffixes": ["BBG"]
     },
+    "droidspaces": {
+      "description": "CoreShift build with Droidspaces GKI support.",
+      "features": ["droidspaces"],
+      "ak3_suffixes": ["DROIDSPACES"]
+    },
+    "bbg-droidspaces": {
+      "description": "CoreShift build with BBG and Droidspaces GKI support.",
+      "features": ["bbg", "droidspaces"],
+      "ak3_suffixes": ["BBG", "DROIDSPACES"]
+    },
     "ksu": {
       "description": "CoreShift build with KernelSU support.",
       "features": ["ksu"],
@@ -20,6 +30,16 @@
       "features": ["ksu", "bbg"],
       "ak3_suffixes": ["KSU", "BBG"]
     },
+    "ksu-droidspaces": {
+      "description": "CoreShift build with KernelSU and Droidspaces GKI support.",
+      "features": ["ksu", "droidspaces"],
+      "ak3_suffixes": ["KSU", "DROIDSPACES"]
+    },
+    "ksu-bbg-droidspaces": {
+      "description": "CoreShift build with KernelSU, BBG, and Droidspaces GKI support.",
+      "features": ["ksu", "bbg", "droidspaces"],
+      "ak3_suffixes": ["KSU", "BBG", "DROIDSPACES"]
+    },
     "ksu-susfs": {
       "description": "CoreShift build with KernelSU and SUSFS support.",
       "features": ["ksu", "susfs"],
@@ -29,6 +49,16 @@
       "description": "CoreShift build with KernelSU, SUSFS, and BBG support.",
       "features": ["ksu", "susfs", "bbg"],
       "ak3_suffixes": ["KSU", "SUSFS", "BBG"]
+    },
+    "ksu-susfs-droidspaces": {
+      "description": "CoreShift build with KernelSU, SUSFS, and Droidspaces GKI support.",
+      "features": ["ksu", "susfs", "droidspaces"],
+      "ak3_suffixes": ["KSU", "SUSFS", "DROIDSPACES"]
+    },
+    "ksu-susfs-bbg-droidspaces": {
+      "description": "CoreShift build with KernelSU, SUSFS, BBG, and Droidspaces GKI support.",
+      "features": ["ksu", "susfs", "bbg", "droidspaces"],
+      "ak3_suffixes": ["KSU", "SUSFS", "BBG", "DROIDSPACES"]
     }
   }
 }

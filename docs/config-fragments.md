@@ -5,6 +5,7 @@
 - `configs/fragments/coreshift.fragment`
 - Repo-root `private.fragment`
 - `common/lto.fragment`
+- `common/droidspaces.fragment`
 - `common/features.fragment`
 - `common/private.fragment`
 - `common/private.required`
@@ -15,6 +16,7 @@
 - `configs/fragments/coreshift.fragment`: CoreShift baseline
 - Repo-root `private.fragment`: user-owned local input
 - `common/lto.fragment`: profile-owned generated output
+- `common/droidspaces.fragment`: Droidspaces-owned generated output
 - `common/features.fragment`: variant-owned generated output
 
 Additional generated helpers:
@@ -30,7 +32,8 @@ Additional generated helpers:
 1. Base defconfig
 2. `common/private.fragment`
 3. `common/lto.fragment`
-4. `common/features.fragment`
+4. `common/droidspaces.fragment`
+5. `common/features.fragment`
 
 Kleaf consumes `common/coreshift.kleaf.fragment`, which is generated during workspace prep and refreshed after feature application.
 
@@ -38,5 +41,5 @@ Kleaf consumes `common/coreshift.kleaf.fragment`, which is generated during work
 
 - `coreshift.fragment` stays branch-neutral and retains the filesystem defaults.
 - Repo-root `private.fragment` is local and layered last relative to the baseline fragment.
+- `common/droidspaces.fragment` starts as an empty generated fragment and is rewritten only when the selected variant enables `droidspaces` or `DROIDSPACES_ENABLE=1` forces it for local testing.
 - `android16-6.12-lts` intentionally rejects full-LTO override paths such as `CONFIG_LTO_CLANG_FULL=y` in repo-root `private.fragment`.
-

@@ -28,7 +28,7 @@ Each profile JSON under `profiles/` defines:
 Current profiles use `name == kernel_source_branch` and `manifest_branch == common-<name>`.
 Every current profile declares `manifest_overlay`, `manifest_overlay_mode`, and `lto` explicitly.
 
-Profiles select the manifest workspace policy. They do not carry keep/remove arrays directly.
+Profiles select the manifest workspace policy and allowed variants. Optional patch features such as `droidspaces` are declared by variants in `configs/variants.json` and enabled per profile through `configs/profile-variants.json`.
 
 ## Manifest overlay selection
 
@@ -84,4 +84,5 @@ Allowed `lto` values are:
 - All current profiles use `full` LTO except `android16-6.12-lts`, which uses `thin`.
 - `android16-6.12-lts` rejects full-LTO override paths because full LTO broke the Kleaf `rust_binder.ko` output.
 - Every current profile selects a profile-specific overlay JSON and currently uses safe mode.
+- Droidspaces is a variant feature. Profiles enable it by allowing `*droidspaces` variants, not by carrying a profile-local boolean.
 - `manifests/overlays/default.json` is the baseline safe policy for the overlay model.

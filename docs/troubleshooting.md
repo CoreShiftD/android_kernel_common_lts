@@ -48,15 +48,6 @@ CoreShift keeps `KernelSU/.git` during build on purpose so KernelSU version meta
 
 If version metadata is missing, inspect whether the prepared workspace lost the KernelSU git directory unexpectedly.
 
-## Ccache zero-hit quick checks
-
-If `ccache -s` shows no cacheable compiler calls:
-
-- Confirm wrapper setup actually enabled
-- Confirm the selected backend is using the wrapper path
-- Confirm the chosen repo/AOSP clang exists and is runnable
-- Confirm repeated builds are using the same profile, source revision, and relevant flags
-
 ## Aggressive overlay failures
 
 If aggressive overlay policy breaks `repo sync` or the later kernel build:

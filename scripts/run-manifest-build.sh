@@ -10,20 +10,6 @@ kleaf: runs tools/bazel run with the Bazel target from the profile
 EOF
 }
 
-ccache_warn_if_no_cacheable_calls() {
-  local stats_output="$1"
-  local wrappers_enabled="${2:-0}"
-  if ! command -v ccache >/dev/null 2>&1; then
-    return 0
-  fi
-  if [ "$wrappers_enabled" != "1" ]; then
-    return 0
-  fi
-  if printf '%s\n' "$stats_output" | grep -Eq 'Cacheable calls:[[:space:]]+0([[:space:]]|$| /)'; then
-    echo "ccache appears configured but compiler calls may not be routed through ccache. Google build.sh may be prepending the real Clang path after wrapper setup." >&2
-  fi
-}
-
 if [ "$#" -lt 3 ]; then
   usage >&2
   exit 1
@@ -98,21 +84,12 @@ case "$BUILD_MODE" in
     fi
     (
       cd "$WORKSPACE_DIR"
-      echo "CORESHIFT_CCACHE_WRAPPERS_ENABLED=${CORESHIFT_CCACHE_WRAPPERS_ENABLED:-}"
+      echo "USE_CCACHE=${USE_CCACHE:-0}"
       echo "PATH=$PATH"
-      echo "CCACHE_DIR=${CCACHE_DIR:-}"
-      echo "CCACHE_WRAPPER_DIR=${CCACHE_WRAPPER_DIR:-}"
-      echo "CCACHE_PATH=${CCACHE_PATH:-}"
       command -v clang
       readlink -f "$(command -v clang)" || true
       clang_version_output="$(clang --version 2>/dev/null | head -n 3 || true)"
       printf '%s\n' "$clang_version_output"
-      if [ "${CORESHIFT_CCACHE_WRAPPERS_ENABLED:-0}" = "1" ] && printf '%s\n' "$clang_version_output" | grep -Fq "Ubuntu clang"; then
-        echo "ccache wrapper resolved to system Ubuntu clang; refusing to build with wrong compiler." >&2
-        exit 1
-      fi
-      pre_build_ccache_stats="$(ccache -s 2>/dev/null || true)"
-      printf '%s\n' "$pre_build_ccache_stats"
       echo "selected BUILD_CONFIG=$selected_build_config"
       echo "LTO=${LTO:-}"
       echo "CORESHIFT_JOBS=${CORESHIFT_JOBS:-}"
@@ -126,18 +103,6 @@ case "$BUILD_MODE" in
         BUILD_CONFIG="$selected_build_config" build/build.sh -j"$jobs" "$@"
       else
         BUILD_CONFIG="$selected_build_config" build/build.sh "$@"
-      fi
-      post_build_ccache_stats="$(ccache -s 2>/dev/null || true)"
-      printf '%s\n' "$post_build_ccache_stats"
-      ccache_warn_if_no_cacheable_calls "$post_build_ccache_stats" "${CORESHIFT_CCACHE_WRAPPERS_ENABLED:-0}"
-      if [ -n "${CCACHE_LOGFILE:-}" ] && [ -f "$CCACHE_LOGFILE" ]; then
-        echo "CCACHE_LOGFILE=$CCACHE_LOGFILE"
-        if [ "${CORESHIFT_CCACHE_DEBUG:-0}" = "1" ]; then
-          echo "ccache log (head):"
-          head -n 5 "$CCACHE_LOGFILE" || true
-          echo "ccache log (tail):"
-          tail -n 5 "$CCACHE_LOGFILE" || true
-        fi
       fi
     )
     ;;
