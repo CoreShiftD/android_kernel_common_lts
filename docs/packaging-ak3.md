@@ -17,9 +17,10 @@ The packager derives a kernel version string from the built `Image` when possibl
 Current suffix mapping:
 
 - `vanilla` -> `CoreShift`
-- `bbg` -> `CoreShift-BBG`
+- `droidspaces` -> `CoreShift-DROIDSPACES`
 - `ksu` -> `CoreShift-KSU`
-- `ksu-bbg` -> `CoreShift-KSU-BBG`
+- `ksu-susfs-bbg` -> `CoreShift-KSU-SUSFS-BBG`
+- `ksu-susfs-bbg-droidspaces` -> `CoreShift-KSU-SUSFS-BBG-DROIDSPACES`
 
 Output is written to:
 
@@ -43,4 +44,3 @@ dist/<profile>/<kernel-version>-<suffixes>.zip
 ## CI artifact uploads
 
 The GitHub Actions build workflows upload only the generated AnyKernel3 zip artifacts.
-

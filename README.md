@@ -28,7 +28,8 @@ cd android_kernel_common_lts
 Build a variant:
 
 ```bash
-./scripts/build-kernel.sh android12-5.10-lts --variant ksu-bbg
+./scripts/build-kernel.sh android12-5.10-lts --variant ksu
+./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs-bbg
 ```
 
 Enable config-driven Droidspaces on a GKI profile:
@@ -54,15 +55,15 @@ cp configs/fragments/private.fragment.example private.fragment
 
 | Profile | LTO | Variants |
 | --- | --- | --- |
-| `android11-5.4-lts` | `full` | `vanilla`, `bbg`, `droidspaces`, `bbg-droidspaces` |
-| `android12-5.4-lts` | `full` | `vanilla`, `bbg`, `droidspaces`, `bbg-droidspaces` |
-| `android12-5.10-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
-| `android13-5.10-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
-| `android13-5.15-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
-| `android14-5.15-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
-| `android14-6.1-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
-| `android15-6.6-lts` | `full` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
-| `android16-6.12-lts` | `thin` | Standard KSU/SUSFS/BBG variants plus matching `*droidspaces` variants |
+| `android11-5.4-lts` | `full` | `vanilla`, `droidspaces` |
+| `android12-5.4-lts` | `full` | `vanilla`, `droidspaces` |
+| `android12-5.10-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
+| `android13-5.10-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
+| `android13-5.15-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
+| `android14-5.15-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
+| `android14-6.1-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
+| `android15-6.6-lts` | `full` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
+| `android16-6.12-lts` | `thin` | `vanilla`, `droidspaces`, `ksu`, `ksu-susfs-bbg`, `ksu-susfs-bbg-droidspaces` |
 
 ## Documentation
 

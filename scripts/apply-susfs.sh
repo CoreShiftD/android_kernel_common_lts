@@ -505,7 +505,7 @@ if [ ! -f "$FEATURES_FRAGMENT" ]; then
 fi
 
 if ! grep -Fxq 'CONFIG_KSU=y' "$FEATURES_FRAGMENT"; then
-  fail "SUSFS requires KernelSU. Use ksu-susfs or ksu-susfs-bbg."
+  fail "SUSFS requires KernelSU. Use ksu-susfs-bbg or ksu-susfs-bbg-droidspaces."
 fi
 
 mapfile -t profile_parts < <(derive_profile_parts)

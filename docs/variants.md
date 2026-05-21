@@ -1,37 +1,31 @@
 # Variants
 
-## JSON-driven variant model
+## JSON-Driven Variant Model
 
 Variant behavior is defined by:
 
 - `configs/variants.json`
 - `configs/profile-variants.json`
 
-`configs/variants.json` describes variant names, feature lists, and AK3 suffixes. `configs/profile-variants.json` controls which variants are enabled on each profile.
+`configs/variants.json` defines the production variant names, feature lists, and AK3 suffixes. `configs/profile-variants.json` controls which production variants are enabled on each profile.
 
-## Implemented variants
+## Production Variants
 
-- `vanilla`
-- `bbg`
-- `droidspaces`
-- `bbg-droidspaces`
-- `ksu`
-- `ksu-bbg`
-- `ksu-droidspaces`
-- `ksu-bbg-droidspaces`
-- `ksu-susfs`
-- `ksu-susfs-bbg`
-- `ksu-susfs-droidspaces`
-- `ksu-susfs-bbg-droidspaces`
+| Variant | KernelSU | SUSFS | BBG | Droidspaces |
+| --- | --- | --- | --- | --- |
+| `vanilla` | no | no | no | no |
+| `droidspaces` | no | no | no | yes |
+| `ksu` | yes | no | no | no |
+| `ksu-susfs-bbg` | yes | yes | yes | no |
+| `ksu-susfs-bbg-droidspaces` | yes | yes | yes | yes |
 
-## Feature integration
+No other variant names or aliases are supported.
 
-- BBG is integrated through the upstream Baseband-guard `setup.sh`.
+## Feature Integration
+
 - KernelSU is integrated through the upstream KernelSU `kernel/setup.sh`.
-- SUSFS is experimental, requires KernelSU, and is integrated from Simonpunk GitLab: `https://gitlab.com/simonpunk/susfs4ksu.git`.
-- SUSFS config is generated from the selected Simonpunk patch and resulting Kconfig symbols.
-- CoreShift enables every discovered `KSU_SUSFS*` symbol in `common/features.fragment`.
-- SUSFS variants are enabled only on profiles that already support KernelSU.
+- SUSFS requires KernelSU and is integrated from Simonpunk GitLab: `https://gitlab.com/simonpunk/susfs4ksu.git`.
+- BBG is integrated through the upstream Baseband-guard `setup.sh`.
 - Droidspaces is a GKI-only feature. Droidspaces variants run `scripts/apply-droidspaces-gki-support.sh`, write `common/droidspaces.fragment`, and fail clearly if the prepared kernel tree is not GKI.
 
 Feature application order is:
@@ -41,23 +35,18 @@ Feature application order is:
 3. `susfs`
 4. `bbg`
 
-## 5.4 policy
+## 5.4 Policy
 
-- BBG is enabled on supported 5.4 profiles.
-- KSU is disabled by default on 5.4 because current KernelSU `main` includes `linux/pgtable.h`, which is missing on the tested 5.4 ACK common trees.
-- SUSFS remains disabled on 5.4 while KSU is disabled there.
-- Droidspaces remains available on 5.4 GKI profiles through the `droidspaces` and `bbg-droidspaces` variants.
+- Production 5.4 profiles expose only `vanilla` and `droidspaces`.
+- KSU variants are not enabled on 5.4 profiles because current KernelSU `main` includes `linux/pgtable.h`, which is missing on the tested 5.4 ACK common trees.
 
-Users experimenting with 5.4 KSU can edit `configs/profile-variants.json` locally and pin `KSU_REF` to a known-good branch or commit.
-
-## Pinning feature refs
+## Pinning Feature Refs
 
 Examples:
 
 ```bash
 ./scripts/build-kernel.sh android13-5.15-lts --variant ksu --build-env KSU_REF=<commit-or-tag>
-./scripts/build-kernel.sh android13-5.15-lts --variant bbg --build-env BBG_REF=<commit-or-tag>
-./scripts/build-kernel.sh android13-5.15-lts --variant ksu-susfs --build-env SUSFS_REF=<branch-or-commit>
+./scripts/build-kernel.sh android13-5.15-lts --variant ksu-susfs-bbg --build-env SUSFS_REF=<branch-or-commit>
 ./scripts/build-kernel.sh android16-6.12-lts --variant droidspaces --build-env DROIDSPACES_REF=<branch-or-commit>
 ```
 
@@ -69,9 +58,9 @@ Local SUSFS same-path overrides under `patches/susfs/<profile>/` are full replac
 
 Droidspaces config is feature-owned. It is written to `common/droidspaces.fragment`, not `common/arch/arm64/configs/gki_defconfig`.
 
-## Feature Git metadata policy
+## Feature Git Metadata Policy
 
-- KernelSU, SUSFS, and Baseband-guard remain build-scoped Git checkouts.
+- KernelSU, SUSFS, Baseband-guard, and Droidspaces remain build-scoped Git checkouts.
 - Those directories are excluded from the prepared workspace commit.
-- `KernelSU/.git`, `SUSFS/.git`, and `Baseband-guard/.git` are kept during build for version metadata.
+- `KernelSU/.git`, `SUSFS/.git`, `Baseband-guard/.git`, and `Droidspaces/.git` are kept during build for version metadata.
 - Staged gitlinks and submodule-like `160000` entries are refused.

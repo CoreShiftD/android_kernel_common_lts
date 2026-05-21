@@ -32,14 +32,15 @@ Additional generated helpers:
 1. Base defconfig
 2. `common/private.fragment`
 3. `common/lto.fragment`
-4. `common/droidspaces.fragment`
-5. `common/features.fragment`
+4. `common/droidspaces.fragment`, only when it contains enabled Droidspaces config
+5. `common/features.fragment`, only when it contains enabled KSU/SUSFS/BBG config
 
-Kleaf consumes `common/coreshift.kleaf.fragment`, which is generated during workspace prep and refreshed after feature application.
+Kleaf consumes `common/coreshift.kleaf.fragment`, which is generated during workspace prep and refreshed after feature application. The Kleaf fragment includes feature fragments only when those fragments contain active config lines.
 
 ## Notes
 
-- `coreshift.fragment` stays branch-neutral and retains the filesystem defaults.
+- `coreshift.fragment` stays branch-neutral and keeps only base defaults that should apply to every variant.
 - Repo-root `private.fragment` is local and layered last relative to the baseline fragment.
 - `common/droidspaces.fragment` starts as an empty generated fragment and is rewritten only when the selected variant enables `droidspaces` or `DROIDSPACES_ENABLE=1` forces it for local testing.
+- `common/features.fragment` starts as an empty generated fragment and is rewritten only by enabled feature hooks.
 - `android16-6.12-lts` intentionally rejects full-LTO override paths such as `CONFIG_LTO_CLANG_FULL=y` in repo-root `private.fragment`.

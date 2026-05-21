@@ -84,5 +84,5 @@ Allowed `lto` values are:
 - All current profiles use `full` LTO except `android16-6.12-lts`, which uses `thin`.
 - `android16-6.12-lts` rejects full-LTO override paths because full LTO broke the Kleaf `rust_binder.ko` output.
 - Every current profile selects a profile-specific overlay JSON and currently uses safe mode.
-- Droidspaces is a variant feature. Profiles enable it by allowing `*droidspaces` variants, not by carrying a profile-local boolean.
+- Droidspaces is a variant feature. Profiles enable it by allowing `droidspaces` and, where KernelSU variants are supported, `ksu-susfs-bbg-droidspaces`.
 - `manifests/overlays/default.json` is the baseline safe policy for the overlay model.

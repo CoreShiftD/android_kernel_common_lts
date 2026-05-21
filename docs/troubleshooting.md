@@ -24,7 +24,7 @@ If you hand-edit fragment inputs around BBG, do not remove that token from the e
 
 ## SUSFS
 
-SUSFS requires KernelSU. Use `ksu-susfs` or `ksu-susfs-bbg`; a raw `susfs` feature without `ksu` is rejected.
+SUSFS requires KernelSU. Use `ksu-susfs-bbg` or `ksu-susfs-bbg-droidspaces`; a raw `susfs` feature without `ksu` is rejected.
 
 If SUSFS patching fails, check for patch rejects, a wrong branch/ref, or a missing `CONFIG_KSU_SUSFS` symbol after patching. Pin a known-good Simonpunk ref with `SUSFS_REF` when automatic branch resolution picks no compatible branch.
 
@@ -34,7 +34,7 @@ When a local same-path SUSFS override exists, `scripts/apply-susfs.sh` replaces 
 
 If expected SUSFS symbols are missing, verify the selected SUSFS branch/ref and patch set. Use `SUSFS_REF` to pin a known-good Simonpunk branch/ref.
 
-If `ksu-susfs-bbg` fails, test `ksu-susfs` first so SUSFS and BBG failures are isolated.
+If `ksu-susfs-bbg` fails, test `ksu` first so KernelSU integration can be isolated from SUSFS and BBG integration.
 
 ## Build log artifacts
 

@@ -141,12 +141,24 @@ def with_trailing_newline(text: str) -> str:
         return ""
     return text if text.endswith("\n") else text + "\n"
 
+def has_config_lines(text: str) -> bool:
+    return any(
+        line.startswith("CONFIG_") or (line.startswith("# CONFIG_") and line.endswith(" is not set"))
+        for line in text.splitlines()
+    )
+
+private_text = read_normalized(private_fragment)
+lto_text = read_normalized(lto_fragment)
+droidspaces_text = read_normalized(droidspaces_fragment)
+features_text = read_normalized(features_fragment)
 combined = (
-    with_trailing_newline(read_normalized(private_fragment))
-    + with_trailing_newline(read_normalized(lto_fragment))
-    + with_trailing_newline(read_normalized(droidspaces_fragment))
-    + with_trailing_newline(read_normalized(features_fragment))
+    with_trailing_newline(private_text)
+    + with_trailing_newline(lto_text)
 )
+if has_config_lines(droidspaces_text):
+    combined += with_trailing_newline(droidspaces_text)
+if has_config_lines(features_text):
+    combined += with_trailing_newline(features_text)
 kleaf_fragment.write_text(combined, encoding="utf-8")
 PY
 }
@@ -405,6 +417,7 @@ for patch_file in "${PATCH_FILES[@]}"; do
 done
 
 config_status="$(write_droidspaces_fragment)"
+log "Config: enabling Droidspaces fragment"
 log "Droidspaces config fragment: $DROIDSPACES_FRAGMENT ($config_status)"
 sync_kleaf_fragment
 log "Synced Kleaf config fragment: $KLEAF_FRAGMENT"

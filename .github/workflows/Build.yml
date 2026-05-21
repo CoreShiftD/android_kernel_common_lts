@@ -25,16 +25,9 @@ on:
         type: choice
         options:
           - vanilla
-          - bbg
           - droidspaces
-          - bbg-droidspaces
           - ksu
-          - ksu-bbg
-          - ksu-droidspaces
-          - ksu-bbg-droidspaces
-          - ksu-susfs
           - ksu-susfs-bbg
-          - ksu-susfs-droidspaces
           - ksu-susfs-bbg-droidspaces
       private_fragment:
         description: "Optional Kconfig fragment content layered last. Leave empty for defaults."
