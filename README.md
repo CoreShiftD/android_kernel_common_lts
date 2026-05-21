@@ -12,7 +12,7 @@ It is intended for repeatable ACK/GKI kernel builds and CI templates, not ROM bu
 - `google_build_sh` and Kleaf support
 - Private Kconfig fragment support
 - Profile-aware LTO
-- Optional BBG, KernelSU, and KernelSU SUSFS variants
+- Optional BBG, KernelSU, KernelSU SUSFS, and Droidspaces GKI support
 - AnyKernel3 packaging
 - GitHub Actions templates
 
@@ -29,6 +29,13 @@ Build a variant:
 
 ```bash
 ./scripts/build-kernel.sh android12-5.10-lts --variant ksu-bbg
+```
+
+Enable Droidspaces on a GKI profile:
+
+```bash
+./scripts/build-kernel.sh android15-6.6-lts \
+  --build-env DROIDSPACES_ENABLE=1
 ```
 
 Use a local private fragment:
