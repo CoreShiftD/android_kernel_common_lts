@@ -13,6 +13,7 @@ from pathlib import Path
 VARIANT_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 FEATURE_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 AK3_SUFFIX_RE = re.compile(r"^[A-Z0-9]+(?:-[A-Z0-9]+)*$")
+KERNELSU_SETUP_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 FEATURE_SUFFIXES = {
     "ksu": "KSU",
     "susfs": "SUSFS",
@@ -182,11 +183,65 @@ def load_profile_variants(path: Path, profile_names: list[str], variants: dict[s
 
     return resolved
 
+def load_kernelsu_setups(
+    path: Path,
+    profile_names: list[str],
+    variants: dict[str, dict[str, object]],
+) -> dict[tuple[str, str], dict[str, str]]:
+    if not path.is_file():
+        return {}
+
+    data = load_json(path)
+    if not isinstance(data, dict):
+        fail(f"{path}: top-level JSON value must be an object")
+
+    raw_profiles = data.get("profiles")
+    if not isinstance(raw_profiles, dict):
+        fail(f"{path}: field 'profiles' must be an object")
+
+    profile_name_set = set(profile_names)
+    resolved: dict[tuple[str, str], dict[str, str]] = {}
+    for profile_name, raw_variants in raw_profiles.items():
+        if profile_name not in profile_name_set:
+            fail(f"{path}: profile {profile_name!r} is not defined in profiles/")
+        if not isinstance(raw_variants, dict):
+            fail(f"{path}: profile {profile_name!r} must map to an object")
+
+        for variant_name, setup_definition in raw_variants.items():
+            if variant_name not in variants:
+                fail(f"{path}: profile {profile_name!r} references unknown variant {variant_name!r}")
+            variant_features = variants[variant_name]["features"]
+            if "ksu" not in variant_features:
+                fail(f"{path}: variant {variant_name!r} does not enable KernelSU")
+            if not isinstance(setup_definition, dict):
+                fail(f"{path}: setup for {profile_name!r}/{variant_name!r} must be an object")
+
+            setup = setup_definition.get("setup")
+            repo = setup_definition.get("repo")
+            ref = setup_definition.get("ref")
+            for field_name, value in (("setup", setup), ("repo", repo), ("ref", ref)):
+                if not isinstance(value, str) or not value:
+                    fail(
+                        f"{path}: setup for {profile_name!r}/{variant_name!r} "
+                        f"must define non-empty string field {field_name!r}"
+                    )
+            if not KERNELSU_SETUP_RE.fullmatch(setup):
+                fail(f"{path}: invalid KernelSU setup name {setup!r}")
+
+            resolved[(profile_name, variant_name)] = {
+                "setup": setup,
+                "repo": repo,
+                "ref": ref,
+            }
+
+    return resolved
+
 
 def build_entries(
     profile_names: list[str],
     variants: dict[str, dict[str, object]],
     profile_variants: dict[str, list[str]],
+    kernelsu_setups: dict[tuple[str, str], dict[str, str]],
     requested_profile: str | None,
     requested_variant: str | None,
 ) -> list[dict[str, str]]:
@@ -218,15 +273,23 @@ def build_entries(
             features = ",".join(definition["features"])
             ak3_suffixes = ",".join(definition["ak3_suffixes"])
 
-            entries.append(
-                {
-                    "profile": profile_name,
-                    "variant": variant_name,
-                    "features": features,
-                    "ak3_suffixes": ak3_suffixes,
-                    "artifact_name": f"ak3-{profile_name}-{variant_name}",
-                }
-            )
+            entry = {
+                "profile": profile_name,
+                "variant": variant_name,
+                "features": features,
+                "ak3_suffixes": ak3_suffixes,
+                "artifact_name": f"ak3-{profile_name}-{variant_name}",
+            }
+            kernelsu_setup = kernelsu_setups.get((profile_name, variant_name))
+            if kernelsu_setup:
+                entry.update(
+                    {
+                        "kernelsu_setup": kernelsu_setup["setup"],
+                        "kernelsu_repo": kernelsu_setup["repo"],
+                        "kernelsu_ref": kernelsu_setup["ref"],
+                    }
+                )
+            entries.append(entry)
 
     return entries
 
@@ -246,15 +309,24 @@ def main() -> int:
     profiles_dir = repo_root / "profiles"
     variants_path = repo_root / "configs" / "variants.json"
     profile_variants_path = repo_root / "configs" / "profile-variants.json"
+    kernelsu_setups_path = repo_root / "configs" / "kernelsu-setups.json"
 
     profile_names = load_profile_names(profiles_dir)
     variants = load_variants(variants_path)
     profile_variants = load_profile_variants(profile_variants_path, profile_names, variants)
+    kernelsu_setups = load_kernelsu_setups(kernelsu_setups_path, profile_names, variants)
 
     requested_profile = args.profile if args.profile or not args.all_profiles else None
     requested_variant = args.variant if args.variant or not args.all_variants else None
 
-    entries = build_entries(profile_names, variants, profile_variants, requested_profile, requested_variant)
+    entries = build_entries(
+        profile_names,
+        variants,
+        profile_variants,
+        kernelsu_setups,
+        requested_profile,
+        requested_variant,
+    )
     json.dump({"include": entries}, sys.stdout, separators=(",", ":"))
     sys.stdout.write("\n")
     return 0

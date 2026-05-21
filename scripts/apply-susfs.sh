@@ -344,36 +344,64 @@ PY
 looks_like_kernelsu_dir() {
   local candidate="$1"
   [ -d "$candidate" ] || return 1
-  [ -f "$candidate/kernel/Kconfig" ] ||
-    [ -f "$candidate/kernel/Kbuild" ] ||
-    [ -f "$candidate/kernel/Makefile" ] ||
-    [ -f "$candidate/kernel/setup.sh" ]
+  [ -f "$candidate/Kconfig" ] || return 1
+  [ -f "$candidate/Makefile" ] || [ -f "$candidate/Kbuild" ] || return 1
+  [ -f "$candidate/ksu.c" ] ||
+    [ -f "$candidate/setup.sh" ] ||
+    [ -f "$candidate/extras.c" ] ||
+    [ -f "$candidate/tiny_sulog.c" ]
 }
 
 find_kernelsu_dir() {
   local candidate
+  local search_roots=("$COMMON_DIR")
   local fixed_candidates=(
-    "$COMMON_DIR/KernelSU"
-    "$COMMON_DIR/KernelSU-Next"
     "$COMMON_DIR/drivers/kernelsu"
+    "$COMMON_DIR/KernelSU"
+    "$COMMON_DIR/KernelSU/kernel"
+    "$COMMON_DIR/KernelSU-Next"
+    "$COMMON_DIR/KernelSU-Next/kernel"
+    "$COMMON_DIR/MultiSU"
+    "$COMMON_DIR/MultiSU/kernel"
     "$COMMON_DIR/drivers/KernelSU"
+    "$COMMON_DIR/drivers/KernelSU/kernel"
+    "$WORKSPACE_DIR/drivers/kernelsu"
   )
 
+  if [ -d "$WORKSPACE_DIR/drivers" ]; then
+    search_roots+=("$WORKSPACE_DIR/drivers")
+  fi
+
   for candidate in "${fixed_candidates[@]}"; do
+    if [ -L "$candidate" ]; then
+      candidate="$(readlink -f "$candidate")"
+    fi
     if looks_like_kernelsu_dir "$candidate"; then
       printf '%s\n' "$candidate"
+      return 0
+    fi
+    if looks_like_kernelsu_dir "$candidate/kernel"; then
+      printf '%s\n' "$candidate/kernel"
       return 0
     fi
   done
 
   while IFS= read -r candidate; do
+    if [ -L "$candidate" ]; then
+      candidate="$(readlink -f "$candidate")"
+    fi
     if looks_like_kernelsu_dir "$candidate"; then
       printf '%s\n' "$candidate"
       return 0
     fi
+    if looks_like_kernelsu_dir "$candidate/kernel"; then
+      printf '%s\n' "$candidate/kernel"
+      return 0
+    fi
   done < <(
-    find "$COMMON_DIR" -mindepth 1 -maxdepth 5 -type d \
-      \( -iname 'KernelSU' -o -iname 'KernelSU-*' -o -iname 'kernelsu' -o -iname 'kernelsu-*' \) \
+    find "${search_roots[@]}" -mindepth 1 -maxdepth 5 \
+      \( -type d -o -type l \) \
+      \( -iname 'KernelSU' -o -iname 'KernelSU-*' -o -iname 'MultiSU' -o -iname 'kernelsu' -o -iname 'kernelsu-*' \) \
       | sort
   )
 
@@ -434,28 +462,31 @@ apply_patch_file() {
   local target_dir="$2"
   local label="$3"
   local patch_log
+  local patch_level
 
   patch_log="$(patch_log_path "$patch_file" "$label")"
   : > "$patch_log"
 
-  log "Dry-run ${label} patch: $patch_file"
-  if (cd "$target_dir" && patch --dry-run -p1 < "$patch_file") >"$patch_log" 2>&1; then
-    log "Applying ${label} patch: $patch_file"
-    if ! (cd "$target_dir" && patch -p1 < "$patch_file") >>"$patch_log" 2>&1; then
-      echo "Failed to apply ${label} patch: $patch_file" >&2
-      sed -n '1,120p' "$patch_log" >&2
+  for patch_level in 1 2; do
+    log "Dry-run ${label} patch: $patch_file (-p$patch_level)"
+    if (cd "$target_dir" && patch --dry-run "-p$patch_level" < "$patch_file") >"$patch_log" 2>&1; then
+      log "Applying ${label} patch: $patch_file (-p$patch_level)"
+      if ! (cd "$target_dir" && patch "-p$patch_level" < "$patch_file") >>"$patch_log" 2>&1; then
+        echo "Failed to apply ${label} patch: $patch_file" >&2
+        sed -n '1,120p' "$patch_log" >&2
+        cleanup_patch_log "$patch_log"
+        return 1
+      fi
       cleanup_patch_log "$patch_log"
-      return 1
+      return 0
     fi
-    cleanup_patch_log "$patch_log"
-    return 0
-  fi
 
-  if (cd "$target_dir" && patch --dry-run -R -p1 < "$patch_file") >"$patch_log" 2>&1; then
-    log "Skipping already-applied ${label} patch: $patch_file"
-    cleanup_patch_log "$patch_log"
-    return 0
-  fi
+    if (cd "$target_dir" && patch --dry-run -R "-p$patch_level" < "$patch_file") >"$patch_log" 2>&1; then
+      log "Skipping already-applied ${label} patch: $patch_file (-p$patch_level)"
+      cleanup_patch_log "$patch_log"
+      return 0
+    fi
+  done
 
   echo "Failed dry-run for ${label} patch: $patch_file" >&2
   echo "Patch target directory: $target_dir" >&2
