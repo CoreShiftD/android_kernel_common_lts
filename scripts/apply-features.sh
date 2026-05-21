@@ -56,12 +56,24 @@ def with_trailing_newline(text: str) -> str:
         return ""
     return text if text.endswith("\n") else text + "\n"
 
+def has_config_lines(text: str) -> bool:
+    return any(
+        line.startswith("CONFIG_") or (line.startswith("# CONFIG_") and line.endswith(" is not set"))
+        for line in text.splitlines()
+    )
+
+private_text = read_normalized(private_fragment)
+lto_text = read_normalized(lto_fragment)
+droidspaces_text = read_normalized(droidspaces_fragment)
+features_text = read_normalized(features_fragment)
 combined = (
-    with_trailing_newline(read_normalized(private_fragment))
-    + with_trailing_newline(read_normalized(lto_fragment))
-    + with_trailing_newline(read_normalized(droidspaces_fragment))
-    + with_trailing_newline(read_normalized(features_fragment))
+    with_trailing_newline(private_text)
+    + with_trailing_newline(lto_text)
 )
+if has_config_lines(droidspaces_text):
+    combined += with_trailing_newline(droidspaces_text)
+if has_config_lines(features_text):
+    combined += with_trailing_newline(features_text)
 kleaf_fragment.write_text(combined, encoding="utf-8")
 PY
 }
@@ -93,21 +105,28 @@ if [ -n "$FEATURES_CSV" ]; then
   done
 fi
 
+if [ "${#trimmed_features[@]}" -eq 0 ]; then
+  echo "Config: vanilla selected, skipping feature fragments"
+fi
+
 if feature_requested "susfs" "${trimmed_features[@]}" &&
    ! feature_requested "ksu" "${trimmed_features[@]}"; then
-  echo "SUSFS requires KernelSU. Use ksu-susfs or ksu-susfs-bbg." >&2
+  echo "SUSFS requires KernelSU. Use ksu-susfs-bbg or ksu-susfs-bbg-droidspaces." >&2
   exit 1
 fi
 
 if feature_requested "ksu" "${trimmed_features[@]}"; then
+  echo "Config: enabling KernelSU fragment"
   "$SCRIPT_DIR/apply-ksu.sh" "$WORKSPACE_DIR"
 fi
 
 if feature_requested "susfs" "${trimmed_features[@]}"; then
+  echo "Config: enabling SUSFS fragment"
   "$SCRIPT_DIR/apply-susfs.sh" "$WORKSPACE_DIR" "$PROFILE_NAME"
 fi
 
 if feature_requested "bbg" "${trimmed_features[@]}"; then
+  echo "Config: enabling BBG fragment"
   "$SCRIPT_DIR/apply-bbg.sh" "$WORKSPACE_DIR"
 fi
 

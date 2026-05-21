@@ -20,6 +20,17 @@ FEATURE_SUFFIXES = {
     "droidspaces": "DROIDSPACES",
 }
 FEATURE_DISPLAY_ORDER = tuple(FEATURE_SUFFIXES)
+PRODUCTION_VARIANTS = (
+    "vanilla",
+    "droidspaces",
+    "ksu",
+    "ksu-susfs-bbg",
+    "ksu-susfs-bbg-droidspaces",
+)
+
+
+def allowed_variants_message() -> str:
+    return ", ".join(PRODUCTION_VARIANTS)
 
 
 def fail(message: str) -> "None":
@@ -117,14 +128,17 @@ def load_variants(path: Path) -> dict[str, dict[str, object]]:
             "ak3_suffixes": ak3_suffixes,
         }
 
+    defined_variant_names = tuple(variants)
+    if defined_variant_names != PRODUCTION_VARIANTS:
+        fail(
+            f"{path}: variants must be exactly: {allowed_variants_message()}"
+        )
+
     vanilla = variants.get("vanilla")
     if vanilla is None:
         fail(f"{path}: variant 'vanilla' must exist")
     if vanilla["features"] != [] or vanilla["ak3_suffixes"] != []:
         fail(f"{path}: variant 'vanilla' must have empty features and empty ak3_suffixes")
-    if "bbg" not in variants:
-        fail(f"{path}: variant 'bbg' must exist")
-
     return variants
 
 
@@ -179,12 +193,18 @@ def build_entries(
     if requested_profile is not None and requested_profile not in profile_variants:
         fail(f"unknown profile: {requested_profile}")
     if requested_variant is not None and requested_variant not in variants:
-        fail(f"unknown variant: {requested_variant}")
+        fail(
+            f"unknown variant: {requested_variant}. "
+            f"Allowed variants: {allowed_variants_message()}"
+        )
 
     if requested_profile is not None and requested_variant is not None:
         allowed = profile_variants[requested_profile]
         if requested_variant not in allowed:
-            fail(f"variant {requested_variant!r} is not allowed for profile {requested_profile!r}")
+            fail(
+                f"variant {requested_variant!r} is not allowed for profile {requested_profile!r}. "
+                f"Allowed for this profile: {', '.join(allowed)}"
+            )
 
     selected_profiles = profile_names if requested_profile is None else [requested_profile]
     entries: list[dict[str, str]] = []

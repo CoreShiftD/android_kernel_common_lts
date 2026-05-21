@@ -654,7 +654,7 @@ fi
 if [ "$EFFECTIVE_DROIDSPACES" = "1" ]; then
   "$REPO_ROOT/scripts/apply-droidspaces-gki-support.sh" "$WORKSPACE_DIR"
 else
-  echo "Droidspaces disabled for profile: $PROFILE_NAME"
+  echo "Config: Droidspaces fragment disabled for variant $RESOLVED_VARIANT"
 fi
 
 "$REPO_ROOT/scripts/apply-features.sh" "$WORKSPACE_DIR" "$CORESHIFT_FEATURES_VALUE" "$PROFILE_NAME"

@@ -17,8 +17,7 @@ Build a profile:
 Build a profile with a variant:
 
 ```bash
-./scripts/build-kernel.sh android12-5.10-lts --variant ksu-bbg
-./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs
+./scripts/build-kernel.sh android12-5.10-lts --variant ksu
 ./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs-bbg
 ```
 
@@ -32,7 +31,7 @@ Build with Droidspaces GKI support:
 Pin a SUSFS ref:
 
 ```bash
-./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs \
+./scripts/build-kernel.sh android12-5.10-lts --variant ksu-susfs-bbg \
   --build-env SUSFS_REF=<branch-or-commit>
 ```
 
@@ -106,7 +105,7 @@ The cleanup is limited to generated cache/work/output paths. Source directories 
 
 ## Droidspaces GKI support
 
-Droidspaces is config-driven, not env-only. It is enabled by selecting a variant whose feature list includes `droidspaces`, such as `droidspaces`, `bbg-droidspaces`, `ksu-droidspaces`, or `ksu-susfs-bbg-droidspaces`. Profiles allow Droidspaces by listing those variants in `configs/profile-variants.json`.
+Droidspaces is config-driven, not env-only. It is enabled by selecting a variant whose feature list includes `droidspaces`: `droidspaces` or `ksu-susfs-bbg-droidspaces`. Profiles allow Droidspaces by listing those variants in `configs/profile-variants.json`.
 
 `scripts/apply-droidspaces-gki-support.sh` runs against the prepared workspace before the normal feature hooks when the selected variant includes `droidspaces`. The helper supports GKI kernels only, selects the upstream patch set from kernel version, writes the required Kconfig entries into `common/droidspaces.fragment`, refreshes `common/coreshift.kleaf.fragment`, and only adds the required IPC symbol exports for 6.12+ kernels.
 
@@ -117,6 +116,8 @@ Droidspaces is config-driven, not env-only. It is enabled by selecting a variant
 - `DROIDSPACES_ENABLE=0`: force-disable Droidspaces for local testing
 
 The generated `common/droidspaces.fragment` contains the required IPC, namespace, devtmpfs, netfilter/ipset, and tmpfs xattr options. It is merged between `common/lto.fragment` and `common/features.fragment` for both `google_build_sh` and Kleaf paths.
+
+Vanilla builds do not receive Droidspaces, KernelSU, SUSFS, or BBG feature config. Feature fragments are merged only when the selected variant enables the corresponding feature.
 
 The pre-6.12 `SYSVIPC` patch defaults to `DROIDSPACES_SYSVIPC_KABI_SLOT=6_7_8`. Supported override values are `1_2_3`, `3_4_5`, and `6_7_8`.
 
