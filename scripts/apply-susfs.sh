@@ -290,6 +290,8 @@ build_filtered_kernel_patch() {
   local filtered_patch
 
   filtered_patch="$(mktemp)"
+  # Same-path overrides are full replacements for upstream file sections,
+  # not tiny post-patches layered on top of the upstream monolithic patch.
   python3 - "$patch_file" "$override_dir" "$filtered_patch" <<'PY'
 import re
 import sys
@@ -542,6 +544,28 @@ fi
 for patch_file in "${susfs_kernel_patch_files[@]}"; do
   filtered_patch_file="$patch_file"
   if [ "${#local_override_patch_files[@]}" -gt 0 ]; then
+    while IFS= read -r replaced_path; do
+      [ -n "$replaced_path" ] || continue
+      log "Replacing upstream SUSFS section for $replaced_path with local full override"
+    done < <(
+      python3 - "$patch_file" "$LOCAL_KERNEL_PATCH_DIR" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+patch_path = Path(sys.argv[1])
+override_dir = Path(sys.argv[2])
+
+for line in patch_path.read_text(encoding="utf-8").splitlines():
+    match = re.match(r"^diff --git a/(.+) b/(.+)$", line)
+    if not match:
+        continue
+
+    target_path = match.group(2)
+    if (override_dir / f"{target_path}.patch").is_file():
+        print(target_path)
+PY
+    )
     filtered_patch_file="$(build_filtered_kernel_patch "$patch_file" "$LOCAL_KERNEL_PATCH_DIR")"
     if [ -n "$filtered_patch_file" ] && [ "$filtered_patch_file" != "$patch_file" ]; then
       log "Filtered upstream SUSFS kernel patch through local overrides: $patch_file"
