@@ -8,7 +8,9 @@ fi
 
 WORKSPACE_DIR="$1"
 MAKEFILE_PATH="$WORKSPACE_DIR/common/usr/include/Makefile"
+# shellcheck disable=SC2016
 PATCH_LINE='UAPI_CFLAGS += $(UAPI_SYSROOT_CFLAGS)'
+# shellcheck disable=SC2016
 MATCH_LINE='UAPI_CFLAGS += $(filter -m32 -m64 --target=%, $(KBUILD_CPPFLAGS) $(KBUILD_CFLAGS))'
 
 if [ ! -f "$MAKEFILE_PATH" ]; then

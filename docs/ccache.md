@@ -11,7 +11,7 @@ The previous ccache setup could preserve stale compiler and workspace state acro
 - GitHub Actions workflows do not restore or save ccache caches.
 - `scripts/build-kernel.sh` sets `USE_CCACHE=0` by default.
 - `CCACHE_*`, `USE_CCACHE`, and `CORESHIFT_CCACHE_DEBUG` are rejected as `--build-env` inputs.
-- `scripts/setup-ccache.sh` and `scripts/setup-ccache-wrappers.sh` are compatibility no-ops that keep ccache disabled.
+- The ccache setup and wrapper helper scripts were removed.
 
 ## Cleanup
 

@@ -65,11 +65,13 @@ If `SUSFS_REF` is unset, CoreShift first checks `configs/susfs-refs.json`, then 
 
 SUSFS config is variant-owned. It is written to `common/features.fragment`, not `configs/fragments/coreshift.fragment` or repo-root `private.fragment`.
 
+Local SUSFS same-path overrides under `patches/susfs/<profile>/` are full replacements for the matching upstream file sections. They are not tiny post-patches; each override must preserve the complete upstream SUSFS behavior for that file and adjust only for kernel source drift.
+
 Droidspaces config is feature-owned. It is written to `common/droidspaces.fragment`, not `common/arch/arm64/configs/gki_defconfig`.
 
 ## Feature Git metadata policy
 
-- KernelSU, SUSFS, and Baseband-guard remain temporary Git checkouts during build.
+- KernelSU, SUSFS, and Baseband-guard remain build-scoped Git checkouts.
 - Those directories are excluded from the prepared workspace commit.
 - `KernelSU/.git`, `SUSFS/.git`, and `Baseband-guard/.git` are kept during build for version metadata.
 - Staged gitlinks and submodule-like `160000` entries are refused.

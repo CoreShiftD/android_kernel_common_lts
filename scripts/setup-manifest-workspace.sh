@@ -140,12 +140,7 @@ fi
     repo_init_log="$(mktemp)"
     repo_sync_log="$(mktemp)"
   fi
-  cleanup_logs() {
-    if [ -z "${CORESHIFT_LOG_DIR:-}" ]; then
-      rm -f "$repo_init_log" "$repo_sync_log"
-    fi
-  }
-  trap cleanup_logs EXIT
+  trap 'if [ -z "${CORESHIFT_LOG_DIR:-}" ]; then rm -f "$repo_init_log" "$repo_sync_log"; fi' EXIT
 
   if [ -e .repo ] && [ ! -d .repo ]; then
     echo "Workspace has a non-directory .repo entry: $WORKSPACE_DIR/.repo" >&2

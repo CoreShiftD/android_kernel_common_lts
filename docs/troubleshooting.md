@@ -30,6 +30,8 @@ If SUSFS patching fails, check for patch rejects, a wrong branch/ref, or a missi
 
 CoreShift scans the selected Simonpunk patch files and resulting Kconfig files, then writes every discovered `KSU_SUSFS*` symbol to `common/features.fragment`. SUSFS config is variant-owned, not part of `configs/fragments/coreshift.fragment` or repo-root `private.fragment`.
 
+When a local same-path SUSFS override exists, `scripts/apply-susfs.sh` replaces the matching upstream file section with the local full replacement. If a SUSFS behavior disappears after an override change, audit the local replacement patch against the upstream section first.
+
 If expected SUSFS symbols are missing, verify the selected SUSFS branch/ref and patch set. Use `SUSFS_REF` to pin a known-good Simonpunk branch/ref.
 
 If `ksu-susfs-bbg` fails, test `ksu-susfs` first so SUSFS and BBG failures are isolated.
